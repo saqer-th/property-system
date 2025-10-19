@@ -6,6 +6,7 @@ import multer from "multer";
 import fetch from "node-fetch";
 import fs from "fs";
 import FormData from "form-data";
+import extractRouter from "./routes/extract.js";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -13,6 +14,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
+app.use("/", extractRouter);
 
 // ===============================
 // ⚙️ قاعدة البيانات (PostgreSQL / Neon)
