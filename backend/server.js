@@ -7,6 +7,7 @@ import fetch from "node-fetch";
 import fs from "fs";
 import FormData from "form-data";
 import extractRouter from "./routes/extract.js";
+import { spawn } from "child_process";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -231,31 +232,57 @@ app.get("/", (_, res) =>
 );
 
 // ===============================
-// 📄 تحليل ملف عقد PDF عبر Python
-// ===============================
+// 📄 تحليل ملف عقد PDF عبر Python (تشغيل سكربت Python محليًا)
 const upload = multer({ dest: "uploads/" });
 app.post("/api/extract", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع أي ملف" });
     const filePath = req.file.path;
-    const formData = new FormData();
-    formData.append("file", fs.createReadStream(filePath));
 
-    const pythonRes = await fetch("http://127.0.0.1:8081/extract", {
-      method: "POST",
-      body: formData,
+    // 🐍 Run Python script directly
+    const py = spawn("python", ["extract/extract_ejar.py", filePath], { windowsHide: true });
+    let output = "";
+    let errorOutput = "";
+
+    py.stdout.on("data", (data) => (output += data.toString()));
+    py.stderr.on("data", (data) => (errorOutput += data.toString()));
+
+    py.on("close", (code) => {
+      // cleanup uploaded file
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {}
+
+      if (code !== 0) {
+        console.error("Python error:", errorOutput || output);
+        return res.status(500).json({ error: "Extraction failed", details: errorOutput || output });
+      }
+
+      try {
+        // إذا السكربت طبع مسار JSON مثل: "JSON saved -> /tmp/result.json"
+        const match = output.match(/JSON saved -> (.+\.json)/);
+        if (match) {
+          const jsonPath = match[1].trim();
+          const data = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+          try {
+            fs.unlinkSync(jsonPath);
+          } catch (e) {}
+          return res.json(data);
+        }
+
+        // محاول قراءة JSON مطبوع مباشرةً إلى stdout
+        const parsed = output ? JSON.parse(output) : {};
+        return res.json(parsed);
+      } catch (err) {
+        console.error("Parse error:", err, "output:", output);
+        return res.status(500).json({ error: "Failed to parse extraction result", details: err.message });
+      }
     });
-
-    const text = await pythonRes.text();
-    fs.unlinkSync(filePath);
-
-    if (!pythonRes.ok)
-      return res.status(500).json({ error: "فشل تحليل الملف في Python" });
-
-    const json = JSON.parse(text);
-    return res.json(json);
   } catch (err) {
-    console.error("🔥 خطأ أثناء الاتصال بـ Python:", err);
+    console.error("🔥 خطأ أثناء تشغيل Python:", err);
+    try {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+    } catch (e) {}
     res.status(500).json({ error: err.message });
   }
 });
