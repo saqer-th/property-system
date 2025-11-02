@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "postinstall": "pip install -r extract/requirements.txt || true && node install-chromium.js || true"
+    "postinstall": "pip install -r extract/requirements.txt || true"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +14,6 @@
   "dependencies": {
     "@open-wa/wa-automate": "^4.76.0",
     "bcrypt": "^6.0.0",
-    "chromium": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
