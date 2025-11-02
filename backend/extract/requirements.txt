@@ -1,0 +1,8 @@
+flask
+pdfplumber
+arabic-reshaper
+python-bidi
+Pillow
+torch
+easyocr
+opencv-python
