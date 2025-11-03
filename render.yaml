@@ -1,21 +1,20 @@
 services:
   - type: web
     name: property-system-backend
-    env: node
+    env: docker
     plan: starter
-
-    buildCommand: cd backend && npm ci
-    startCommand: cd backend && node server.js
-
+    
+    # Render auto-detects Dockerfile in backend/
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PUPPETEER_PRODUCT
-        value: chrome
-      - key: PUPPETEER_CACHE_DIR
-        value: /opt/render/project/.cache/puppeteer
-
+      - key: PORT
+        value: 10000
+    
     disk:
       name: whatsapp-session
-      mountPath: /opt/render/project/src/backend/.wadata
+      mountPath: /app/.wadata
       sizeGB: 1
