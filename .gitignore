@@ -1,21 +1,17 @@
 # =========================================================
 # Property Management System - Global Ignore
 # =========================================================
-
 # --- Node.js ---
 node_modules/
 **/node_modules/
-
 # --- Environment files ---
 .env
 **/.env
-
 # --- Builds & Outputs ---
 dist/
 build/
 **/dist/
 **/build/
-
 # --- Logs & Cache ---
 *.log
 npm-debug.log*
@@ -28,19 +24,16 @@ uploads/
 __pycache__/
 *.pyc
 *.pyo
-
 # --- WhatsApp session / Puppeteer data ---
 .wadata/
 **/.wadata/
 **/data/
 **/_IGNORE_*
-
 # --- Python virtual environments ---
 venv/
 .venv/
 **/venv/
 **/.venv/
-
 # --- IDE & System files ---
 .vscode/
 .idea/
@@ -48,8 +41,13 @@ venv/
 Thumbs.db
 *.suo
 *.user
-
 # --- Misc / Backup ---
 *.bak
 *.swp
 *.tmp
+
+# managed
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed
