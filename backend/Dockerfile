@@ -1,49 +1,50 @@
+# -------------------------------------------------------------
+# 🧱 1. Base image with Node & system libs Chrome needs
+# -------------------------------------------------------------
 FROM node:20-bookworm-slim
 
-# Install Chrome dependencies
 RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Chromium
-RUN apt-get update && apt-get install -y chromium \
-    && rm -rf /var/lib/apt/lists/*
+  ca-certificates fonts-liberation xdg-utils \
+  libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
+  libdbus-1-3 libdrm2 libgbm-dev libgtk-3-0 libnspr4 libnss3 \
+  libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
+  libxkbcommon0 libxshmfence1 libxext6 libxfixes3 libxi6 \
+  libxrender1 libxss1 libxtst6 libu2f-udev libvulkan1 \
+  --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files
+# -------------------------------------------------------------
+# 🧱 2. Copy dependencies and install (including PM2)
+# -------------------------------------------------------------
 COPY package*.json ./
+RUN npm install pm2 -g && npm ci
 
-# Install dependencies (Puppeteer will download Chrome if needed)
-RUN npm ci --only=production
-
-# Copy app code
+# -------------------------------------------------------------
+# 🧱 3. Copy the rest of the source code
+# -------------------------------------------------------------
 COPY . .
 
-# Create .wadata directory
-RUN mkdir -p .wadata
+# -------------------------------------------------------------
+# 🧱 4. Shared folder for WhatsApp session data
+# -------------------------------------------------------------
+RUN mkdir -p /app/.wadata && chmod -R 777 /app/.wadata
 
-# Expose port
-EXPOSE 10000
+# -------------------------------------------------------------
+# 🧱 5. Environment defaults
+# -------------------------------------------------------------
+ENV PORT=8085
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
 
-# Start app
-CMD ["node", "server.js"]
+# -------------------------------------------------------------
+# 🧱 6. Add PM2 config and expose ports
+# -------------------------------------------------------------
+COPY pm2.config.cjs ./pm2.config.cjs
+
+EXPOSE 8085 8002
+
+# -------------------------------------------------------------
+# 🧱 7. Run both backend + WhatsApp bot
+# -------------------------------------------------------------
+CMD ["pm2-runtime", "start", "pm2.config.cjs"]
