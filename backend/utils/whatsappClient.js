@@ -11,16 +11,11 @@ let connectionState = "DISCONNECTED";
    🧩 إنشاء عميل واتساب (جاهز لـ Render)
    ========================================================= */
 export async function initWhatsAppClient() {
-  if (client) {
-    console.log("⚡ WhatsApp client already initialized");
-    return client;
-  }
+  if (client) return client;
 
   if (isInitializing) {
     console.log("⏳ WhatsApp client is already initializing...");
-    while (isInitializing) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    while (isInitializing) await new Promise((r) => setTimeout(r, 300));
     return client;
   }
 
@@ -29,111 +24,70 @@ export async function initWhatsAppClient() {
 
   try {
     const sessionDir = path.resolve("./.wadata");
-    if (!fs.existsSync(sessionDir)) {
+    if (!fs.existsSync(sessionDir))
       fs.mkdirSync(sessionDir, { recursive: true });
-    }
-
-    const hasSession = fs.existsSync(path.join(sessionDir, "Default"));
 
     const isProduction = process.env.NODE_ENV === "production";
 
-    // Resolve browser executable
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || null;
-    if (isProduction) {
-      const candidates = [
-        executablePath,                    // env wins if valid
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome-stable",
-      ].filter(Boolean);
-
-      executablePath = candidates.find((p) => fs.existsSync(p)) || null;
-      if (!executablePath) {
-        throw new Error("No browser binary found. Set PUPPETEER_EXECUTABLE_PATH to a valid path.");
-      }
-    } else {
+    // Resolve browser binary
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || "";
+    if (!executablePath) {
       try {
-        const puppeteer = await import("puppeteer");
-        executablePath = puppeteer.default?.executablePath?.() || puppeteer.executablePath();
-      } catch {
-        executablePath = undefined; // let puppeteer default
-      }
+        executablePath = puppeteer.executablePath();
+      } catch {}
     }
-    console.log("🧭 Using browser executable:", executablePath);
+    console.log("🧭 Using browser executable:", executablePath || "(puppeteer default)");
 
     const config = {
       sessionId: "property-system-session",
       multiDevice: true,
       headless: "new",
-      useChrome: false,
-      executablePath,
+      useChrome: false,                 // control via executablePath
+      executablePath: executablePath || undefined,
       dataPath: sessionDir,
       sessionDataPath: sessionDir,
       authTimeout: 0,
       qrTimeout: 0,
       restartOnCrash: async () => {
-        console.log("🔄 WhatsApp crashed, restarting...");
-        client = null;
-        connectionState = "DISCONNECTED";
-        isInitializing = false;
-        await new Promise((r) => setTimeout(r, 3000));
+        client = null; connectionState = "DISCONNECTED"; isInitializing = false;
+        await new Promise(r => setTimeout(r, 1500));
         return initWhatsAppClient();
       },
       killProcessOnBrowserClose: true,
       cacheEnabled: true,
       disableSpins: true,
       skipBrokenMethodsCheck: true,
-      // Keep args minimal on Render to avoid MD issues warning
-      chromiumArgs: isProduction
-        ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-        : undefined,
+      // Minimal flags for containers
+      chromiumArgs: isProduction ? [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ] : undefined,
+      puppeteerOptions: {
+        headless: "new",
+        args: isProduction ? [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage"
+        ] : undefined
+      }
     };
 
     client = await wa.create(config);
 
-    console.log("✅ WhatsApp client ready");
-
-    // 🔄 معالجة حالات الاتصال
     client.onStateChanged((state) => {
       console.log("🔄 WhatsApp state:", state);
       connectionState = state;
-
-      if (state === "CONFLICT") {
-        console.log("⚠️ WhatsApp session conflict detected");
-        client.forceRefocus();
-      }
-
-      if (state === "UNLAUNCHED") {
-        console.log("⚠️ WhatsApp unlaunched");
-      }
-
-      if (state === "UNPAIRED") {
-        console.log("⚠️ WhatsApp unpaired - QR scan required");
-      }
-
-      if (state === "CONNECTED") {
-        console.log("📶 WhatsApp connected successfully ✅");
-      }
+      if (state === "CONFLICT") client.forceRefocus();
     });
 
-    // ✅ حدد الحالة الافتراضية
-    connectionState = hasSession ? "CONNECTED" : "UNPAIRED";
-
     isInitializing = false;
-
-    console.log(
-      hasSession
-        ? "💾 Session restored successfully — no QR required 🎉"
-        : "📲 New session created — scan the QR code once."
-    );
-
     return client;
-  } catch (err) {
-    console.error("❌ WhatsApp init error:", err.message || err);
+  } catch (e) {
+    isInitializing = false;
     client = null;
     connectionState = "DISCONNECTED";
-    isInitializing = false;
-    throw err;
+    throw e;
   }
 }
 
