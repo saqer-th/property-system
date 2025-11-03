@@ -37,27 +37,38 @@ export async function initWhatsAppClient() {
 
     const isProduction = process.env.NODE_ENV === "production";
 
-    // pick browser binary
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    if (!isProduction) {
+    // Resolve browser executable
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || null;
+    if (isProduction) {
+      const candidates = [
+        executablePath,                    // env wins if valid
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome-stable",
+      ].filter(Boolean);
+
+      executablePath = candidates.find((p) => fs.existsSync(p)) || null;
+      if (!executablePath) {
+        throw new Error("No browser binary found. Set PUPPETEER_EXECUTABLE_PATH to a valid path.");
+      }
+    } else {
       try {
-        executablePath = puppeteer.executablePath();
+        const puppeteer = await import("puppeteer");
+        executablePath = puppeteer.default?.executablePath?.() || puppeteer.executablePath();
       } catch {
-        // fall back to system Chrome if available
-        executablePath = undefined;
+        executablePath = undefined; // let puppeteer default
       }
     }
-    console.log("🧭 Using browser executable:", executablePath || "(puppeteer default)");
+    console.log("🧭 Using browser executable:", executablePath);
 
     const config = {
       sessionId: "property-system-session",
       multiDevice: true,
-      headless: true, // stable with Render
-      useChrome: false, // control via executablePath
-      executablePath,   // on Render: /usr/bin/chromium (set via env)
+      headless: "new",
+      useChrome: false,
+      executablePath,
       dataPath: sessionDir,
       sessionDataPath: sessionDir,
-
       authTimeout: 0,
       qrTimeout: 0,
       restartOnCrash: async () => {
@@ -72,19 +83,11 @@ export async function initWhatsAppClient() {
       cacheEnabled: true,
       disableSpins: true,
       skipBrokenMethodsCheck: true,
+      // Keep args minimal on Render to avoid MD issues warning
+      chromiumArgs: isProduction
+        ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        : undefined,
     };
-
-    if (isProduction) {
-      config.chromiumArgs = [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        // no "--single-process"
-      ];
-    }
 
     client = await wa.create(config);
 
