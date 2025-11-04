@@ -6,7 +6,7 @@ module.exports = {
       args:
         "@open-wa/wa-automate --socket --port 8002 --api-key " +
         (process.env.WA_API_KEY || "changeme123") +
-        " --use-chrome --headless --log-qr --session-dir /app/.wadata/_IGNORE_session",
+        " --use-puppeteer --headless --log-qr --session-dir /app/.wadata/_IGNORE_session",
       env: {
         PORT: 8002,
         DATA_PATH: "/app/.wadata",

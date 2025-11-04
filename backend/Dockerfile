@@ -47,4 +47,4 @@ EXPOSE 8085 8002
 # -------------------------------------------------------------
 # 🧱 7. Run both backend + WhatsApp bot
 # -------------------------------------------------------------
-CMD ["npx", "pm2-runtime", "start", "pm2.config.cjs", "--env", "production"]
+CMD ["pm2-runtime", "start", "pm2.config.cjs"]
