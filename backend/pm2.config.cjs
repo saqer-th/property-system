@@ -1,23 +1,35 @@
 module.exports = {
   apps: [
+    /* =========================================================
+       💬 WhatsApp Socket API (open-wa)
+       ========================================================= */
     {
       name: "wa-automate",
       script: "npx",
       args:
         "@open-wa/wa-automate --socket --port 8002 --api-key " +
         (process.env.WA_API_KEY || "changeme123") +
-        " --use-puppeteer --headless --log-qr --session-dir /app/.wadata/_IGNORE_session",
+        " --use-puppeteer --headless --log-qr " +
+        "--session-dir /app/.wadata/_IGNORE_session " +
+        "--puppeteer-timeout 60000 " + // 🕒 give Chrome 60s to start
+        "--puppeteer-chromium-args " +
+        "\"--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --single-process --no-zygote --disable-software-rasterizer\"",
       env: {
         PORT: 8002,
-        DATA_PATH: "/app/.wadata",
+        DATA_PATH: "/app/.wadata", // persistent session storage
       },
       autorestart: true,
-      exp_backoff_restart_delay: 5000,
+      exp_backoff_restart_delay: 5000, // auto-retry if Puppeteer crashes
     },
+
+    /* =========================================================
+       🟢 Backend Server (Express API)
+       ========================================================= */
     {
       name: "backend",
       script: "bash",
-      args: ["-c", "sleep 15 && node server.js"],
+      // Wait for WA socket to initialize before backend starts
+      args: ["-c", "sleep 20 && node server.js"],
       env: {
         PORT: 8085,
         WA_API_URL: "http://localhost:8002",
