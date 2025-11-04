@@ -11,7 +11,8 @@ module.exports = {
         (process.env.WA_API_KEY || "changeme123") +
         " --use-puppeteer --headless --log-qr " +
         "--session-dir /app/.wadata/_IGNORE_session " +
-        "--puppeteer-timeout 60000 " + // 🕒 give Chrome 60s to start
+        "--puppeteer-timeout 90000 " + // 🕒 give Chrome 60s to start
+        "--puppeteer-headless 'new' " + // use Chromium’s modern headless mode
         "--puppeteer-chromium-args " +
         "\"--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --single-process --no-zygote --disable-software-rasterizer\"",
       env: {
