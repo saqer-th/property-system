@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   apps: [
     {
       name: "wa-automate",
@@ -7,7 +7,10 @@ export default {
         "@open-wa/wa-automate --socket --port 8002 --api-key " +
         (process.env.WA_API_KEY || "changeme123") +
         " --use-chrome --headless --log-qr --session-dir /app/.wadata/_IGNORE_session",
-      env: { PORT: 8002, DATA_PATH: "/app/.wadata" },
+      env: {
+        PORT: 8002,
+        DATA_PATH: "/app/.wadata",
+      },
       autorestart: true,
       exp_backoff_restart_delay: 5000,
     },
