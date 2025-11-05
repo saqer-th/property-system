@@ -1,13 +1,13 @@
-export default {
+module.exports = {
   apps: [
     {
       name: "backend",
       script: "server.js",
-      cwd: "./backend", // 👈 مهم
+      cwd: "./backend",
       instances: 1,
       exec_mode: "fork",
       watch: false,
-      autorestart: true, // ✅ يخلي السيرفر يستمر
+      autorestart: true,
       env: {
         NODE_ENV: "production",
         PORT: 8085,
