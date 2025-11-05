@@ -1,50 +1,62 @@
-# ==========================================================
-# 🧩 Stage 1: Build Environment
-# ==========================================================
-FROM node:22-slim AS build
+# =====================================================
+# 🧱 1. Base image
+# =====================================================
+FROM node:20-bookworm-slim
 
-# 👇 تثبيت Chromium وكل الحزم اللازمة لتشغيل Puppeteer داخل Render
+# =====================================================
+# 🧩 2. Install Chromium (for Puppeteer / Open-WA)
+# =====================================================
 RUN apt-get update && apt-get install -y \
-    chromium \
-    chromium-driver \
-    fonts-liberation \
-    libasound2 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    wget \
-    ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+  chromium \
+  fonts-liberation \
+  libatk-bridge2.0-0 \
+  libgtk-3-0 \
+  libx11-xcb1 \
+  libnss3 \
+  libxss1 \
+  libasound2 \
+  libdrm2 \
+  libgbm1 \
+  libxdamage1 \
+  libxcomposite1 \
+  libxrandr2 \
+  libxkbcommon0 \
+  libxshmfence1 \
+  libxext6 \
+  libxfixes3 \
+  libxi6 \
+  --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/*
 
-# ==========================================================
-# 🧩 Stage 2: App setup
-# ==========================================================
+# =====================================================
+# ⚙️ 3. Set working directory
+# =====================================================
 WORKDIR /app
 
-# نسخ الملفات
+# =====================================================
+# 📦 4. Install dependencies
+# =====================================================
 COPY package*.json ./
-RUN npm install --production
+RUN npm install pm2 -g && npm install
 
+# =====================================================
+# 📁 5. Copy source code
+# =====================================================
 COPY . .
 
-# ==========================================================
-# ⚙️ إعداد بيئة Puppeteer
-# ==========================================================
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# =====================================================
+# 🌍 6. Environment variables
+# =====================================================
 ENV NODE_ENV=production
-ENV TZ=Asia/Riyadh
+ENV PORT=8085
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# ==========================================================
-# 🚀 Start the bot
-# ==========================================================
-CMD ["npm", "start"]
+# =====================================================
+# 🧠 7. Expose ports (optional)
+# =====================================================
+EXPOSE 8085
+
+# =====================================================
+# 🚀 8. Start app via PM2
+# =====================================================
+CMD ["pm2-runtime", "start", "pm2.config.cjs", "--env", "production"]
