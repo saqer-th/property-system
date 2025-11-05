@@ -1,57 +1,50 @@
-# -------------------------------------------------------------
-# 🧱 1. Base image with Node & all system libs Puppeteer needs
-# -------------------------------------------------------------
-FROM node:20-bookworm-slim
+# ==========================================================
+# 🧩 Stage 1: Build Environment
+# ==========================================================
+FROM node:22-slim AS build
 
-# Prevent Puppeteer from crashing due to low /dev/shm
-RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
-
-# Install Chrome runtime dependencies (not Chrome itself)
+# 👇 تثبيت Chromium وكل الحزم اللازمة لتشغيل Puppeteer داخل Render
 RUN apt-get update && apt-get install -y \
-  ca-certificates fonts-liberation xdg-utils \
-  libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
-  libdbus-1-3 libdrm2 libgbm-dev libgtk-3-0 libnspr4 libnss3 \
-  libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
-  libxkbcommon0 libxshmfence1 libxext6 libxfixes3 libxi6 \
-  libxrender1 libxss1 libxtst6 libu2f-udev libvulkan1 \
-  --no-install-recommends && rm -rf /var/lib/apt/lists/*
+    chromium \
+    chromium-driver \
+    fonts-liberation \
+    libasound2 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    wget \
+    ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# -------------------------------------------------------------
-# 🧱 2. Working directory
-# -------------------------------------------------------------
+# ==========================================================
+# 🧩 Stage 2: App setup
+# ==========================================================
 WORKDIR /app
 
-# -------------------------------------------------------------
-# 🧱 3. Install dependencies (PM2 + project)
-# -------------------------------------------------------------
+# نسخ الملفات
 COPY package*.json ./
-RUN npm install -g pm2 && npm ci
+RUN npm install --production
 
-# -------------------------------------------------------------
-# 🧱 4. Copy app source
-# -------------------------------------------------------------
 COPY . .
 
-# -------------------------------------------------------------
-# 🧱 5. Shared folder for WhatsApp session data
-# -------------------------------------------------------------
-RUN mkdir -p /app/.wadata && chmod -R 777 /app/.wadata
-
-# -------------------------------------------------------------
-# 🧱 6. Environment defaults
-# -------------------------------------------------------------
-ENV PORT=8085
+# ==========================================================
+# ⚙️ إعداد بيئة Puppeteer
+# ==========================================================
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
-ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
+ENV TZ=Asia/Riyadh
 
-# -------------------------------------------------------------
-# 🧱 7. Add PM2 config and expose both ports
-# -------------------------------------------------------------
-COPY pm2.config.cjs ./pm2.config.cjs
-EXPOSE 8085 8002
-
-# -------------------------------------------------------------
-# 🧱 8. Launch PM2 Runtime (keeps both apps alive)
-# -------------------------------------------------------------
-CMD ["npx", "pm2-runtime", "start", "pm2.config.cjs", "--env", "production"]
+# ==========================================================
+# 🚀 Start the bot
+# ==========================================================
+CMD ["npm", "start"]
