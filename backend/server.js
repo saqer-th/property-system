@@ -11,6 +11,7 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import { verifyToken } from "./middleware/authMiddleware.js";
 import { autoAudit } from "./middleware/autoAudit.js";
+import { initWhatsAppClient } from "./utils/whatsappClient.js";
 
 // ✅ تحميل المتغيرات من .env
 dotenv.config();
