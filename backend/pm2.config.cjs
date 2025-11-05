@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "property-system",
       script: "server.js",
-      cwd: "./backend", // 👈 يغيّر مجلد العمل إلى backend
+      cwd: ".", // 👈 يغيّر مجلد العمل إلى backend
       exec_mode: "fork",
       instances: 1,
       watch: false,
