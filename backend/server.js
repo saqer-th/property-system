@@ -172,3 +172,13 @@ app.listen(PORT, async () => {
   }
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+// =======================================
+(async () => {
+  try {
+    await initWhatsAppClient();
+    console.log("✅ WhatsApp client initialized from backend.");
+  } catch (err) {
+    console.error("❌ Failed to start WhatsApp client:", err.message);
+  }
+})();
