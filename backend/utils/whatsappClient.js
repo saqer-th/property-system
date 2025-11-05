@@ -71,6 +71,9 @@ export async function initWhatsAppClient() {
       disableSpins: true,
       killProcessOnBrowserClose: false,
       safeMode: true,
+      qrLogSkip: false, // ✅ اطبع QR في اللوج
+      qrMaxRetries: 10,
+
       chromiumArgs: isProd
         ? [
             "--no-sandbox",
@@ -89,6 +92,19 @@ export async function initWhatsAppClient() {
         isInitializing = false;
         await new Promise((r) => setTimeout(r, 3000));
         return initWhatsAppClient();
+      },
+
+      // 🧩 حفظ QR كملف + طباعة base64 في اللوج (Render)
+      qrCallback: async (qrData, sessionId) => {
+        try {
+          const base64 = qrData.replace(/^data:image\/png;base64,/, "");
+          const filePath = path.join(sessionDir, "qr.png");
+          fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+          console.log(`📸 QR saved → ${filePath}`);
+          console.log(`🟩 QR (Base64): ${qrData.substring(0, 200)}...`);
+        } catch (err) {
+          console.warn("⚠️ Failed to save QR:", err.message);
+        }
       },
     };
 
@@ -150,7 +166,6 @@ export async function sendWhatsAppMessage(phone, message) {
 
     if (connectionState !== "CONNECTED") {
       console.log(`⚠️ WhatsApp not connected (state: ${connectionState})`);
-      // لا تعيد التهيئة إذا العميل شغال فعلاً
       if (client) {
         console.log("⏳ Waiting for WhatsApp to finish pairing...");
         await new Promise((r) => setTimeout(r, 5000));
