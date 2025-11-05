@@ -42,6 +42,9 @@ export async function initWhatsAppClient() {
 
     const hasSession = fs.existsSync(path.join(sessionDir, "Default"));
 
+    // ======================================================
+    // 🧭 Chrome path (يختار المسار الصحيح تلقائيًا)
+    // ======================================================
     const isProd = process.env.NODE_ENV === "production";
     const executablePath = isProd
       ? process.env.PUPPETEER_EXECUTABLE_PATH ||
@@ -51,10 +54,13 @@ export async function initWhatsAppClient() {
 
     console.log("🧭 Using Chrome executable:", executablePath);
 
+    // ======================================================
+    // ⚙️ إعداد التكوين الديناميكي
+    // ======================================================
     const config = {
       sessionId: "property-system-session",
       multiDevice: true,
-      headless: isProd,
+      headless: isProd, // 🧠 تلقائي: local = false, render = true
       useChrome: true,
       executablePath,
       dataPath: sessionDir,
@@ -88,14 +94,19 @@ export async function initWhatsAppClient() {
 
     client = await wa.create(config);
 
+    /* =========================================================
+       🔄 تحديث الحالة عند التغيير
+       ========================================================= */
     client.onStateChanged((state) => {
       console.log("🔄 WhatsApp state:", state);
       connectionState = state;
+
       if (state === "CONFLICT") client.forceRefocus();
       if (state === "CONNECTED") console.log("📶 WhatsApp connected successfully ✅");
       if (state === "UNPAIRED") console.log("📲 Please scan QR again.");
     });
 
+    // ✅ اعتبر الجلسة متصلة عند أول رسالة واردة
     client.onAnyMessage(() => {
       if (connectionState !== "CONNECTED") {
         console.log("✅ WhatsApp is now active — session stable!");
@@ -139,6 +150,7 @@ export async function sendWhatsAppMessage(phone, message) {
 
     if (connectionState !== "CONNECTED") {
       console.log(`⚠️ WhatsApp not connected (state: ${connectionState})`);
+      // لا تعيد التهيئة إذا العميل شغال فعلاً
       if (client) {
         console.log("⏳ Waiting for WhatsApp to finish pairing...");
         await new Promise((r) => setTimeout(r, 5000));
@@ -159,12 +171,20 @@ export async function sendWhatsAppMessage(phone, message) {
 }
 
 /* =========================================================
-   📊 الحالة + الإغلاق الآمن
+   📊 الحصول على حالة الاتصال
    ========================================================= */
 export function getConnectionState() {
   return connectionState;
 }
 
+export async function getWhatsAppClient() {
+  if (!client) await initWhatsAppClient();
+  return client;
+}
+
+/* =========================================================
+   🧹 إغلاق جلسة واتساب بشكل آمن
+   ========================================================= */
 export async function closeWhatsApp() {
   if (client) {
     try {
@@ -179,11 +199,15 @@ export async function closeWhatsApp() {
   }
 }
 
+/* =========================================================
+   🧩 إغلاق التطبيق بالكامل عند الخروج
+   ========================================================= */
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down gracefully...");
   await closeWhatsApp();
   process.exit(0);
 });
+
 process.on("SIGTERM", async () => {
   console.log("\n🛑 Received SIGTERM...");
   await closeWhatsApp();
