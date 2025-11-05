@@ -53,45 +53,36 @@ export async function initWhatsAppClient() {
       useChrome: true,
       executablePath,
       dataPath: sessionDir,
-      sessionDataPath: sessionDir,
       qrTimeout: 0,
       authTimeout: 0,
       cacheEnabled: true,
       disableSpins: true,
       killProcessOnBrowserClose: false,
-      safeMode: true,
+      safeMode: false, // ✅ خليها false في Render
       qrLogSkip: false,
       qrMaxRetries: 10,
 
-      // 💡 إعدادات Chromium الخاصة بـ Render
-      chromiumArgs: isProd
-        ? [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--no-zygote",
-            "--disable-software-rasterizer",
-          ]
-        : [],
+      // ✅ لا نستخدم chromiumArgs لأنها تسبب تعطل على multi-device
+      // chromiumArgs: isProd ? [...] : [],
 
-      // 🧩 عرض QR مشفر في اللوج + حفظه كصورة
-      qrCallback: async (base64Qr) => {
+      // ✅ عرض QR مشفر في اللوج + حفظه كصورة
+      qrCallback: async (qrData) => {
         try {
-          const base64Data = base64Qr.replace(/^data:image\/png;base64,/, "");
+          const base64 = qrData.replace(/^data:image\/png;base64,/, "");
           const qrFile = path.join(sessionDir, "qr.png");
-          fs.writeFileSync(qrFile, Buffer.from(base64Data, "base64"));
-          const encoded = Buffer.from(base64Qr).toString("base64");
-          console.log("📱 Copy this encoded QR string ↓");
-          console.log(encoded);
-          console.log("🔓 Decode it here → https://base64.guru/converter/decode/image");
-          console.log(`📸 Also saved to: ${qrFile}`);
+          fs.writeFileSync(qrFile, Buffer.from(base64, "base64"));
+
+          console.log("📱 Copy all lines below and decode at → https://base64.guru/converter/decode/image");
+          for (let i = 0; i < base64.length; i += 4000) {
+            console.log(base64.substring(i, i + 4000));
+          }
+          console.log(`📸 QR also saved to: ${qrFile}`);
         } catch (err) {
           console.warn("⚠️ Failed to handle QR:", err.message);
         }
       },
 
-      // 🧩 إعادة التشغيل التلقائي عند التعطل
+      // ✅ إعادة التشغيل التلقائي عند التعطل
       restartOnCrash: async () => {
         console.log("🔄 Restarting WhatsApp after crash...");
         client = null;
