@@ -9,16 +9,19 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 🧩 نخلي المسار دايمًا لمجلد backend حتى لو الملف داخل utils
+// المسار الثابت لمجلد الجلسة داخل backend
 const backendDir = path.resolve(__dirname, "..");
-const sessionFile = path.join(backendDir, "_IGNORE_property-system-session");
+const sessionDir = path.join(backendDir, "session");
+
+// تأكد من وجود المجلد
+if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
 let client = null;
 let isInitializing = false;
 let connectionState = "DISCONNECTED";
 
 /* =========================================================
-   🚀 إنشاء عميل واتساب ثابت (يحفظ الجلسة في backend مباشرة)
+   🚀 إنشاء عميل واتساب متكامل (جلسة ثابتة)
    ========================================================= */
 export async function initWhatsAppClient() {
   if (client || isInitializing) return client;
@@ -27,15 +30,13 @@ export async function initWhatsAppClient() {
   console.log("🚀 Initializing WhatsApp client...");
 
   try {
-    // 🧠 تأكد من وجود مجلد backend
-    if (!fs.existsSync(backendDir)) fs.mkdirSync(backendDir, { recursive: true });
-
     const isProd = true;
     const executablePath = isProd
       ? "/usr/bin/chromium-browser"
       : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
     console.log("🧭 Using Chrome executable:", executablePath);
+    console.log("💾 WhatsApp session directory:", sessionDir);
 
     const config = {
       sessionId: "property-system-session",
@@ -44,9 +45,9 @@ export async function initWhatsAppClient() {
       useChrome: true,
       executablePath,
 
-      // ✅ نحفظ الجلسة في backend مباشرة
-      dataPath: backendDir,
-      userDataDir: backendDir,
+      // ✅ مجلد الجلسة الثابت
+      dataPath: sessionDir,
+      userDataDir: sessionDir,
 
       qrTimeout: 0,
       authTimeout: 0,
@@ -58,14 +59,13 @@ export async function initWhatsAppClient() {
       qrMaxRetries: 10,
 
       /* =========================================================
-         📱 QR CALLBACK: حفظ الكود كصورة وطباعة base64
+         📱 عرض QR عند الجلسة الجديدة
          ========================================================= */
       qrCallback: async (qrData) => {
         try {
           const base64 = qrData.replace(/^data:image\/png;base64,/, "");
-          const qrFile = path.join(backendDir, "qr.png");
+          const qrFile = path.join(sessionDir, "qr.png");
           fs.writeFileSync(qrFile, Buffer.from(base64, "base64"));
-
           console.log("📱 Copy all lines below and decode at → https://base64.guru/converter/decode/image");
           for (let i = 0; i < base64.length; i += 4000)
             console.log(base64.substring(i, i + 4000));
@@ -91,7 +91,7 @@ export async function initWhatsAppClient() {
     client = await wa.create(config);
 
     /* =========================================================
-       🔄 تحديث الحالة عند التغيير
+       🔄 مراقبة تغييرات الحالة
        ========================================================= */
     client.onStateChanged((state) => {
       console.log("🔄 WhatsApp state:", state);
@@ -115,7 +115,7 @@ export async function initWhatsAppClient() {
       }
     });
 
-    console.log("💾 WhatsApp session stored in:", sessionFile);
+    console.log("💾 WhatsApp session ready and saved in:", sessionDir);
 
     isInitializing = false;
     return client;
