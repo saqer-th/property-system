@@ -42,14 +42,7 @@ export async function initWhatsAppClient() {
       safeMode: false,
       qrLogSkip: false,
       qrMaxRetries: 10,
-      chromiumArgs: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--single-process",
-        "--no-zygote",
-      ],
+
 
       qrCallback: async (qrData) => {
         try {
