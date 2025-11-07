@@ -1,7 +1,11 @@
 import wa from "@open-wa/wa-automate";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from 'url';
+import path from 'path';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 let client = null;
 let isInitializing = false;
 let connectionState = "DISCONNECTED";
