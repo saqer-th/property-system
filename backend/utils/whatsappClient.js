@@ -2,7 +2,7 @@ import wa from "@open-wa/wa-automate";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-
+// للحصول على __dirname في ES Module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
