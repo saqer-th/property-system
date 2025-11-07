@@ -16,7 +16,7 @@ export async function initWhatsAppClient() {
   console.log("🚀 Initializing WhatsApp client...");
 
   try {
-    const sessionDir = path.resolve("./.wadata");
+    const sessionDir = path.resolve(__dirname, ".wadata");
     if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
     const sessionPath = path.join(sessionDir, "_IGNORE_property-system-session");
