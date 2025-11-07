@@ -37,7 +37,7 @@ export async function initWhatsAppClient() {
       headless: isProd,
       useChrome: true,
       executablePath,
-      dataPath: sessionDir,     // ✅ استخدم مجلد الجلسة القديم
+      dataPath: __dirname,     // ✅ استخدم مجلد الجلسة القديم
       userDataDir: sessionDir,  // ✅ يمنع إنشاء مجلدات جديدة مثل .wadata
       qrTimeout: 0,
       authTimeout: 0,
