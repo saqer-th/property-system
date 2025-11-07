@@ -2,16 +2,23 @@ import wa from "@open-wa/wa-automate";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-// للحصول على __dirname في ES Module
+
+/* =========================================================
+   🧭 إعداد المسارات
+   ========================================================= */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 🧩 نخلي المسار دايمًا لمجلد backend حتى لو الملف داخل utils
+const backendDir = path.resolve(__dirname, "..");
+const sessionFile = path.join(backendDir, "_IGNORE_property-system-session");
 
 let client = null;
 let isInitializing = false;
 let connectionState = "DISCONNECTED";
 
 /* =========================================================
-   🚀 إنشاء عميل واتساب متكامل (جلسة ثابتة بدون إنشاء .wadata جديد)
+   🚀 إنشاء عميل واتساب ثابت (يحفظ الجلسة في backend مباشرة)
    ========================================================= */
 export async function initWhatsAppClient() {
   if (client || isInitializing) return client;
@@ -20,9 +27,8 @@ export async function initWhatsAppClient() {
   console.log("🚀 Initializing WhatsApp client...");
 
   try {
-    // 🧭 استخدم المجلد الدائم الخاص بالجسلة الحالية
-    const sessionDir = path.resolve(__dirname, "_IGNORE_property-system-session");
-    if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+    // 🧠 تأكد من وجود مجلد backend
+    if (!fs.existsSync(backendDir)) fs.mkdirSync(backendDir, { recursive: true });
 
     const isProd = true;
     const executablePath = isProd
@@ -37,8 +43,11 @@ export async function initWhatsAppClient() {
       headless: isProd,
       useChrome: true,
       executablePath,
-      dataPath: __dirname,     // ✅ استخدم مجلد الجلسة القديم
-      userDataDir: sessionDir,  // ✅ يمنع إنشاء مجلدات جديدة مثل .wadata
+
+      // ✅ نحفظ الجلسة في backend مباشرة
+      dataPath: backendDir,
+      userDataDir: backendDir,
+
       qrTimeout: 0,
       authTimeout: 0,
       cacheEnabled: true,
@@ -48,11 +57,15 @@ export async function initWhatsAppClient() {
       qrLogSkip: false,
       qrMaxRetries: 10,
 
+      /* =========================================================
+         📱 QR CALLBACK: حفظ الكود كصورة وطباعة base64
+         ========================================================= */
       qrCallback: async (qrData) => {
         try {
           const base64 = qrData.replace(/^data:image\/png;base64,/, "");
-          const qrFile = path.join(sessionDir, "qr.png");
+          const qrFile = path.join(backendDir, "qr.png");
           fs.writeFileSync(qrFile, Buffer.from(base64, "base64"));
+
           console.log("📱 Copy all lines below and decode at → https://base64.guru/converter/decode/image");
           for (let i = 0; i < base64.length; i += 4000)
             console.log(base64.substring(i, i + 4000));
@@ -62,6 +75,9 @@ export async function initWhatsAppClient() {
         }
       },
 
+      /* =========================================================
+         🔄 إعادة التشغيل التلقائي عند التعطل
+         ========================================================= */
       restartOnCrash: async () => {
         console.log("🔄 Restarting WhatsApp after crash...");
         client = null;
@@ -74,9 +90,13 @@ export async function initWhatsAppClient() {
 
     client = await wa.create(config);
 
+    /* =========================================================
+       🔄 تحديث الحالة عند التغيير
+       ========================================================= */
     client.onStateChanged((state) => {
       console.log("🔄 WhatsApp state:", state);
       connectionState = state;
+
       if (state === "CONFLICT") client.forceRefocus();
       if (state === "CONNECTED" || state === "SYNCING") {
         console.log("📶 WhatsApp connected successfully ✅");
@@ -85,6 +105,9 @@ export async function initWhatsAppClient() {
       if (state === "UNPAIRED") console.log("📲 Please scan QR again.");
     });
 
+    /* =========================================================
+       📨 عند أول رسالة واردة نعتبر الجلسة مستقرة
+       ========================================================= */
     client.onAnyMessage(() => {
       if (connectionState !== "CONNECTED") {
         console.log("✅ WhatsApp is now active — session stable!");
@@ -92,7 +115,7 @@ export async function initWhatsAppClient() {
       }
     });
 
-    console.log("💾 Using existing WhatsApp session (no new .wadata created) 🎉");
+    console.log("💾 WhatsApp session stored in:", sessionFile);
 
     isInitializing = false;
     return client;
