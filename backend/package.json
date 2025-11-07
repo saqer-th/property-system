@@ -13,7 +13,8 @@
     "start": "pm2-runtime start pm2.config.cjs --env production",
     "dev": "nodemon server.js",
     "build-chromium": "node install-chromium.js",
-    "postinstall": "pip3 install -r extract/requirements.txt || true"
+    "postinstall": "pip3 install --break-system-packages -r extract/requirements.txt || true"
+
   },
   "dependencies": {
     "@open-wa/wa-automate": "4.76.0",
