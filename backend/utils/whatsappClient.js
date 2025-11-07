@@ -9,9 +9,16 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// المسار الثابت لمجلد الجلسة داخل backend
+// 📁 المسار الثابت لمجلد الجلسة داخل backend
 const backendDir = path.resolve(__dirname, "..");
 const sessionDir = path.join(backendDir, "session");
+
+// 🧹 إزالة أي ملفات جلسة قديمة تسبب تعارض
+const legacyFile = path.join(backendDir, "property-system-session.data.json");
+if (fs.existsSync(legacyFile)) {
+  fs.unlinkSync(legacyFile);
+  console.log("🧹 Removed legacy session file:", legacyFile);
+}
 
 // تأكد من وجود المجلد
 if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
@@ -38,54 +45,40 @@ export async function initWhatsAppClient() {
     console.log("🧭 Using Chrome executable:", executablePath);
     console.log("💾 WhatsApp session directory:", sessionDir);
 
+    // 🔍 تحقق إن كانت جلسة قديمة محفوظة
+    const hasExistingSession =
+      fs.existsSync(path.join(sessionDir, "Default")) &&
+      fs.existsSync(path.join(sessionDir, "Local State"));
+
+    if (hasExistingSession)
+      console.log("💾 Found existing WhatsApp session. Restoring...");
+    else console.log("📲 New session detected. Scan QR when prompted.");
+
     const config = {
       sessionId: "property-system-session",
       multiDevice: true,
       headless: isProd,
       useChrome: true,
       executablePath,
-
-      // ✅ مجلد الجلسة الثابت
       dataPath: sessionDir,
       userDataDir: sessionDir,
-
       qrTimeout: 0,
       authTimeout: 0,
       cacheEnabled: true,
       disableSpins: true,
-      killProcessOnBrowserClose: false,
+      killProcessOnBrowserClose: true,
       safeMode: false,
       qrLogSkip: false,
       qrMaxRetries: 10,
-
-      /* =========================================================
-         📱 عرض QR عند الجلسة الجديدة
-         ========================================================= */
-      qrCallback: async (qrData) => {
-        try {
-          const base64 = qrData.replace(/^data:image\/png;base64,/, "");
-          const qrFile = path.join(sessionDir, "qr.png");
-          fs.writeFileSync(qrFile, Buffer.from(base64, "base64"));
-          console.log("📱 Copy all lines below and decode at → https://base64.guru/converter/decode/image");
-          for (let i = 0; i < base64.length; i += 4000)
-            console.log(base64.substring(i, i + 4000));
-          console.log(`📸 QR also saved to: ${qrFile}`);
-        } catch (err) {
-          console.warn("⚠️ Failed to handle QR:", err.message);
-        }
-      },
-
-      /* =========================================================
-         🔄 إعادة التشغيل التلقائي عند التعطل
-         ========================================================= */
-      restartOnCrash: async () => {
-        console.log("🔄 Restarting WhatsApp after crash...");
-        client = null;
-        connectionState = "DISCONNECTED";
-        isInitializing = false;
-        await new Promise((r) => setTimeout(r, 5000));
-        return initWhatsAppClient();
-      },
+      chromiumArgs: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-gpu",
+        "--no-zygote",
+        `--user-data-dir=${sessionDir}`,
+      ],
     };
 
     client = await wa.create(config);

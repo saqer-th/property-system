@@ -1,13 +1,19 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Property management backend",
   "main": "server.js",
   "scripts": {
+    "setup": "npm install && pip3 install -r extract/requirements.txt && mkdir -p session uploads extract && echo '✅ Setup complete — all dependencies installed and folders ready!'",
+    "reset": "rm -rf session property-system-session.data.json extract/__pycache__ && mkdir -p session && echo '♻️ Old sessions cleared. Ready for fresh setup!' && npm run setup",
+    "update": "git pull origin main && npm install && pip3 install -r extract/requirements.txt && pm2 restart property-system && echo '🚀 Update complete — system restarted successfully!'",
+    "deploy": "npm run reset && npm run update && echo '🚀 Full deployment completed successfully!'",
+    "logs": "pm2 logs property-system --lines 100",
     "start": "pm2-runtime start pm2.config.cjs --env production",
     "dev": "nodemon server.js",
     "build-chromium": "node install-chromium.js",
-    "postinstall": "pip install -r extract/requirements.txt || true"
+    "postinstall": "pip3 install -r extract/requirements.txt || true"
   },
   "dependencies": {
     "@open-wa/wa-automate": "4.76.0",
@@ -23,7 +29,22 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "pg": "^8.12.0",
-    "pm2": "^5.3.0",
     "react-hot-toast": "^2.6.0"
-  }
+  },
+  "devDependencies": {
+    "pm2": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "keywords": [
+    "property",
+    "whatsapp",
+    "real-estate",
+    "nodejs",
+    "postgres"
+  ],
+  "author": "Saqer Althnyan",
+  "license": "MIT"
 }
