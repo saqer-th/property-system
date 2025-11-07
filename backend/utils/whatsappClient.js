@@ -7,7 +7,7 @@ let isInitializing = false;
 let connectionState = "DISCONNECTED";
 
 /* =========================================================
-   🚀 إنشاء عميل واتساب متكامل (يدعم Local + Render تلقائيًا)
+   🚀 تهيئة عميل واتساب (يدعم Render / VPS / Local)
    ========================================================= */
 export async function initWhatsAppClient() {
   if (client || isInitializing) return client;
@@ -19,25 +19,8 @@ export async function initWhatsAppClient() {
     const sessionDir = path.resolve("./.wadata");
     if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
-    const sessionPath = path.join(sessionDir, "_IGNORE_property-system-session");
+    const isProd = true; // ضع false للتجارب المحلية
 
-    // 🧹 تنظيف ملفات القفل القديمة
-    for (const file of ["SingletonLock", "SingletonCookie", "CrashpadMetrics-active.pma"]) {
-      const filePath = path.join(sessionPath, file);
-      if (fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-          console.log(`🧹 Removed lock file: ${file}`);
-        } catch (err) {
-          console.warn(`⚠️ Could not remove ${file}: ${err.message}`);
-        }
-      }
-    }
-
-    const hasSession = fs.existsSync(path.join(sessionDir, "Default"));
-    const isProd = true; //process.env.NODE_ENV === "production";
-
-    // 🧭 اختيار المسار الصحيح لـ Chrome
     const executablePath = isProd
       ? "/usr/bin/chromium-browser"
       : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
@@ -47,7 +30,7 @@ export async function initWhatsAppClient() {
     const config = {
       sessionId: "property-system-session",
       multiDevice: true,
-      headless: isProd,
+      headless: true,
       useChrome: true,
       executablePath,
       dataPath: sessionDir,
@@ -56,31 +39,29 @@ export async function initWhatsAppClient() {
       cacheEnabled: true,
       disableSpins: true,
       killProcessOnBrowserClose: false,
-      safeMode: false, // ✅ خليها false في Render
+      safeMode: false,
       qrLogSkip: false,
       qrMaxRetries: 10,
+      chromiumArgs: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--single-process",
+        "--no-zygote",
+      ],
 
-      // ✅ لا نستخدم chromiumArgs لأنها تسبب تعطل على multi-device
-      // chromiumArgs: isProd ? [...] : [],
-
-      // ✅ عرض QR مشفر في اللوج + حفظه كصورة
       qrCallback: async (qrData) => {
         try {
           const base64 = qrData.replace(/^data:image\/png;base64,/, "");
           const qrFile = path.join(sessionDir, "qr.png");
           fs.writeFileSync(qrFile, Buffer.from(base64, "base64"));
-
-          console.log("📱 Copy all lines below and decode at → https://base64.guru/converter/decode/image");
-          for (let i = 0; i < base64.length; i += 4000) {
-            console.log(base64.substring(i, i + 4000));
-          }
-          console.log(`📸 QR also saved to: ${qrFile}`);
+          console.log("📸 QR code saved to:", qrFile);
         } catch (err) {
           console.warn("⚠️ Failed to handle QR:", err.message);
         }
       },
 
-      // ✅ إعادة التشغيل التلقائي عند التعطل
       restartOnCrash: async () => {
         console.log("🔄 Restarting WhatsApp after crash...");
         client = null;
@@ -93,16 +74,31 @@ export async function initWhatsAppClient() {
 
     client = await wa.create(config);
 
-    // 🔄 تحديث الحالة عند التغيير
-    client.onStateChanged((state) => {
+    /* =========================================================
+       🔄 مراقبة حالة الاتصال
+       ========================================================= */
+    client.onStateChanged(async (state) => {
       console.log("🔄 WhatsApp state:", state);
       connectionState = state;
-      if (state === "CONFLICT") client.forceRefocus();
-      if (state === "CONNECTED") console.log("📶 WhatsApp connected successfully ✅");
-      if (state === "UNPAIRED") console.log("📲 Please scan QR again.");
+
+      if (["CONFLICT", "UNLAUNCHED"].includes(state)) {
+        console.log("⚠️ Conflict or unlaunched, refocusing...");
+        client.forceRefocus();
+      }
+
+      if (["UNPAIRED", "DISCONNECTED"].includes(state)) {
+        console.log("🧩 Client lost connection, reinitializing...");
+        client = null;
+        connectionState = "DISCONNECTED";
+        await new Promise((r) => setTimeout(r, 5000));
+        await initWhatsAppClient();
+      }
+
+      if (state === "CONNECTED") {
+        console.log("✅ WhatsApp connected successfully");
+      }
     });
 
-    // ✅ عند أول رسالة واردة، نعتبر الجلسة مستقرة
     client.onAnyMessage(() => {
       if (connectionState !== "CONNECTED") {
         console.log("✅ WhatsApp is now active — session stable!");
@@ -110,12 +106,7 @@ export async function initWhatsAppClient() {
       }
     });
 
-    console.log(
-      hasSession
-        ? "💾 Session restored — no QR required 🎉"
-        : "📲 New session created — scan the QR code once."
-    );
-
+    console.log("💾 WhatsApp session ready!");
     isInitializing = false;
     return client;
   } catch (err) {
@@ -128,7 +119,7 @@ export async function initWhatsAppClient() {
 }
 
 /* =========================================================
-   💬 إرسال رسالة واتساب
+   💬 إرسال رسالة واتساب مع معالجة Detached Frame
    ========================================================= */
 function formatPhone(phone) {
   if (!phone) return null;
@@ -143,17 +134,39 @@ export async function sendWhatsAppMessage(phone, message) {
   try {
     if (!client) await initWhatsAppClient();
 
+    // ⏳ انتظار الاتصال الكامل
+    let attempts = 0;
+    while (connectionState !== "CONNECTED" && attempts < 10) {
+      console.log(`⏳ Waiting for WhatsApp to connect... (${attempts + 1})`);
+      await new Promise((r) => setTimeout(r, 2000));
+      attempts++;
+    }
+
     if (connectionState !== "CONNECTED") {
-      console.log(`⚠️ WhatsApp not connected (state: ${connectionState})`);
-      await new Promise((r) => setTimeout(r, 4000));
+      throw new Error("WhatsApp not connected yet");
     }
 
     const target = phone.includes("@c.us") ? phone : formatPhone(phone);
     await client.sendText(target, message);
     console.log(`✅ WhatsApp message sent to ${target}`);
     return { success: true, target };
+
   } catch (err) {
     console.error("❌ WhatsApp send error:", err.message);
+
+    // ♻️ إصلاح detached frame أو disconnect
+    if (
+      err.message.includes("detached Frame") ||
+      err.message.includes("Target closed") ||
+      err.message.includes("not connected")
+    ) {
+      console.log("♻️ Reinitializing WhatsApp client after error...");
+      client = null;
+      connectionState = "DISCONNECTED";
+      await new Promise((r) => setTimeout(r, 3000));
+      await initWhatsAppClient();
+    }
+
     return { success: false, error: err.message };
   }
 }
@@ -165,13 +178,8 @@ export function getConnectionState() {
   return connectionState;
 }
 
-export async function getWhatsAppClient() {
-  if (!client) await initWhatsAppClient();
-  return client;
-}
-
 /* =========================================================
-   🧹 إغلاق الجلسة بشكل آمن
+   🧹 إغلاق الجلسة
    ========================================================= */
 export async function closeWhatsApp() {
   if (client) {
@@ -188,7 +196,7 @@ export async function closeWhatsApp() {
 }
 
 /* =========================================================
-   🧩 إغلاق التطبيق بالكامل عند الخروج
+   🧩 إغلاق التطبيق عند الخروج
    ========================================================= */
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down gracefully...");
