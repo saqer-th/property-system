@@ -39,7 +39,7 @@ export async function initWhatsAppClient() {
 
     // 🧭 اختيار المسار الصحيح لـ Chrome
     const executablePath = isProd
-      ? "/usr/bin/chromium"
+      ? "/usr/bin/chromium-browser"
       : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
     console.log("🧭 Using Chrome executable:", executablePath);
