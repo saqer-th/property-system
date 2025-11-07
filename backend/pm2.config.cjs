@@ -11,7 +11,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 8085,
-        PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium"
+        PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser"
       }
     }
   ]

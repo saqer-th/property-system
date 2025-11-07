@@ -35,13 +35,11 @@ export async function initWhatsAppClient() {
     }
 
     const hasSession = fs.existsSync(path.join(sessionDir, "Default"));
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = false; //process.env.NODE_ENV === "production";
 
     // 🧭 اختيار المسار الصحيح لـ Chrome
     const executablePath = isProd
-      ? process.env.PUPPETEER_EXECUTABLE_PATH ||
-        "/usr/bin/chromium" ||
-        "/usr/bin/google-chrome"
+      ? "/usr/bin/chromium-browser"
       : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
     console.log("🧭 Using Chrome executable:", executablePath);
