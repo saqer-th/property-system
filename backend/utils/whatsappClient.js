@@ -35,7 +35,7 @@ export async function initWhatsAppClient() {
     }
 
     const hasSession = fs.existsSync(path.join(sessionDir, "Default"));
-    const isProd = false; //process.env.NODE_ENV === "production";
+    const isProd = true; //process.env.NODE_ENV === "production";
 
     // 🧭 اختيار المسار الصحيح لـ Chrome
     const executablePath = isProd
