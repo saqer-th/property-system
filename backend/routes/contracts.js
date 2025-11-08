@@ -1233,7 +1233,7 @@ router.get("/:id", verifyToken, async (req, res) => {
         [base.id]
       ),
       client.query(
-        `SELECT id, expense_type, amount, date FROM expenses WHERE contract_id = $1 ORDER BY date DESC`,
+        `SELECT id, expense_type, amount,paid_by,on_whom, date FROM expenses WHERE contract_id = $1 ORDER BY date DESC`,
         [base.id]
       ),
       client.query(

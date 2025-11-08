@@ -30,11 +30,11 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
       switch (section) {
         case "contract":
           return {
-            contract_no: contract.contract_no || "",
-            start_date: contract.start_date?.split("T")[0] || "",
-            end_date: contract.end_date?.split("T")[0] || "",
-            annual_rent: contract.annual_rent || "",
-            title_deed_no: contract.title_deed_no || "",
+            [t("contract_no")]: contract.contract_no || "",
+            [t("start_date")]: contract.start_date?.split("T")[0] || "",
+            [t("end_date")]: contract.end_date?.split("T")[0] || "",
+            [t("annual_rent")]: contract.annual_rent || "",
+            [t("title_deed_no")]: contract.property.title_deed_no || "",
           };
         case "tenants":
         case "lessors":

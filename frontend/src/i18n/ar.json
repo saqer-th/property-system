@@ -294,7 +294,25 @@
   "menu_admin_users": "إدارة المستخدمين",
   "menu_admin_audit": "سجل العمليات",
   "menu_office_panel": "لوحة المكتب العقاري",
-  "menu_reminders": "التذكيرات"
+  "menu_reminders": "التذكيرات",
+  "contract_no": "رقم العقد",
+  "start_date": "تاريخ البداية",
+  "end_date": "تاريخ النهاية",
+  "annual_rent": "الإيجار السنوي",
+  "title_deed_no": "رقم سند الملكية",
+  "cr_no": "رقم السجل التجاري",
+  "address": "العنوان",
+  "unit_area": "مساحة الوحدة",
+  "electric_meter_no": "رقم عداد الكهرباء",
+  "water_meter_no": "رقم عداد المياه",
+  "remaining_amount": "المبلغ المتبقي",
+  "paid_amount": "المبلغ المدفوع",
+  "titleDeed": "رقم سند الملكية",
+  "advanceBalance": "رصيد مقدم",
+  "totalDueWithExpenses": "إجمالي المستحق مع المصروفات",
+  "tenantExpenses": "مصروفات المستأجر",
+  "remainingAmount": "المبلغ المتبقي"
+
 
 
 
