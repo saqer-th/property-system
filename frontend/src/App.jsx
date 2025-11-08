@@ -48,7 +48,7 @@ import OfficeDetails from "@/pages/offices/OfficeDetails";
 import EmployeesList from "@/pages/offices/Employees/EmployeesList";
 
 // ⚙️ الإعدادات
-import Settings from "@/pages/Settings";
+import Settings from "@/pages/Settings/Settings";
 
 export default function App() {
   return (
