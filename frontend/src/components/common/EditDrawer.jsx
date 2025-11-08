@@ -39,18 +39,19 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
         case "tenants":
         case "lessors":
         case "units":
+          return { list: contract[section] || [] };
         case "payments":
            return {
-    list: (contract.payments || []).map((p) => ({
-      ...p,
-      due_date: p.due_date ? new Date(p.due_date).toISOString().split("T")[0] : "",
-      amount: p.amount || "",
-      paid_amount: p.paid_amount || "",
-      remaining_amount: p.remaining_amount || "",
-      status: p.status || "",
-      notes: p.notes || "",
-    })),
-  };
+            list: (contract.payments || []).map((p) => ({
+              ...p,
+              due_date: p.due_date ? new Date(p.due_date).toISOString().split("T")[0] : "",
+              amount: p.amount || "",
+              paid_amount: p.paid_amount || "",
+              remaining_amount: p.remaining_amount || "",
+              status: p.status || "",
+              notes: p.notes || "",
+            })),
+          };
         case "expenses":
                   return {
           list: (contract.expenses || []).map((e) => ({
