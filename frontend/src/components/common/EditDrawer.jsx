@@ -34,7 +34,6 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
             [t("start_date")]: contract.start_date?.split("T")[0] || "",
             [t("end_date")]: contract.end_date?.split("T")[0] || "",
             [t("annual_rent")]: contract.annual_rent || "",
-            [t("title_deed_no")]: contract.property.title_deed_no || "",
           };
         case "tenants":
         case "lessors":
