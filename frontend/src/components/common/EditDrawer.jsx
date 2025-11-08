@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Save, Loader2, X, PlusCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { API_KEY } from "@/config";
+import { API_KEY,API_URL } from "@/config";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 
@@ -19,7 +19,6 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
   const { user } = useAuth(); // ✅ هنا نجيب المستخدم الحالي (من AuthContext)
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
-  const API_BASE = "http://localhost:8085";
   const token = localStorage.getItem("token");
   const activeRole = localStorage.getItem("activeRole");
 
@@ -68,7 +67,7 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
   setSaving(true);
 
   try {
-    let endpoint = `${API_BASE}/contracts/${contract.id}`;
+    let endpoint = `${API_URL}/contracts/${contract.id}`;
     let payload = form;
 
     switch (section) {
@@ -112,7 +111,7 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
 
     // ✅ تحديث بيانات العقد بعد الحفظ
     try {
-      const refreshed = await fetch(`${API_BASE}/contracts/${contract.id}`, {
+      const refreshed = await fetch(`${API_URL}/contracts/${contract.id}`, {
         headers: { "x-api-key": API_KEY, Authorization: `Bearer ${token}`, "x-active-role": activeRole },
       }).then((r) => r.json());
 
