@@ -40,9 +40,48 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
         case "lessors":
         case "units":
         case "payments":
+           return {
+    list: (contract.payments || []).map((p) => ({
+      ...p,
+      due_date: p.due_date ? new Date(p.due_date).toISOString().split("T")[0] : "",
+      amount: p.amount || "",
+      paid_amount: p.paid_amount || "",
+      remaining_amount: p.remaining_amount || "",
+      status: p.status || "",
+      notes: p.notes || "",
+    })),
+  };
         case "expenses":
+                  return {
+          list: (contract.expenses || []).map((e) => ({
+            ...e,
+            date: e.date
+              ? new Date(e.date).toISOString().split("T")[0]
+              : "",
+            expense_type: e.expense_type || "",
+            on_whom: e.on_whom || "",
+            paid_by: e.paid_by || "",
+            amount: e.amount || "",
+            notes: e.notes || "",
+          })),
+        };
         case "receipts":
-          return { list: contract[section] || [] };
+        return {
+          list: (contract.receipts || []).map((r) => ({
+            ...r,
+            date: r.date
+              ? new Date(r.date).toISOString().split("T")[0]
+              : "",
+            receipt_type: r.receipt_type || "",
+            payer: r.payer || "",
+            payer_name: r.payer_name || "",
+            receiver: r.receiver || "",
+            receiver_name: r.receiver_name || "",
+            amount: r.amount || "",
+            reason: r.reason || "",
+            notes: r.notes || "",
+          })),
+        };
         case "broker":
           return contract.brokerage_entity || {};
         case "property":
