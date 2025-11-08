@@ -554,7 +554,7 @@ router.post("/full", verifyToken, async (req, res) => {
 // =========================================================
 router.put("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const {
+  let {
     contract_no,
     start_date,
     end_date,
@@ -563,10 +563,21 @@ router.put("/:id", verifyToken, async (req, res) => {
   } = req.body;
 
   try {
-    // ✅ التحقق من وجود العقد أولاً
-    const existCheck = await pool.query("SELECT id FROM contracts WHERE id=$1", [id]);
-    if (existCheck.rowCount === 0)
-      return res.status(404).json({ success: false, message: "❌ العقد غير موجود" });
+    // 🧠 تنظيف القيم الفارغة
+    start_date = start_date || null;
+    end_date = end_date || null;
+    contract_no = contract_no || null;
+    annual_rent = annual_rent || null;
+    total_contract_value = total_contract_value || null;
+
+    // ✅ تحقق من وجود العقد
+    const { rowCount } = await pool.query("SELECT id FROM contracts WHERE id=$1", [id]);
+    if (rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ العقد غير موجود",
+      });
+    }
 
     // 🧾 تحديث بيانات العقد الأساسية
     const result = await pool.query(
@@ -577,31 +588,32 @@ router.put("/:id", verifyToken, async (req, res) => {
         tenancy_start = COALESCE(TO_DATE($2, 'YYYY-MM-DD'), tenancy_start),
         tenancy_end = COALESCE(TO_DATE($3, 'YYYY-MM-DD'), tenancy_end),
         annual_rent = COALESCE($4, annual_rent),
-        total_contract_value = COALESCE($5, total_contract_value),
+        total_contract_value = COALESCE($5, total_contract_value, $4),
         updated_at = NOW()
       WHERE id = $6
-      RETURNING id, contract_no, tenancy_start, tenancy_end, annual_rent, total_contract_value
+      RETURNING 
+        id, 
+        contract_no, 
+        tenancy_start, 
+        tenancy_end, 
+        annual_rent, 
+        total_contract_value, 
+        updated_at
       `,
       [contract_no, start_date, end_date, annual_rent, total_contract_value, id]
     );
 
-    if (result.rowCount === 0)
-      return res.status(404).json({ success: false, message: "❌ Contract not found" });
-
-    const updatedContract = result.rows[0];
-
-    // ⚖️ تحديث إجمالي قيمة العقد تلقائيًا إذا لم تُرسل من الواجهة
-    if (!total_contract_value && annual_rent) {
-      await pool.query(
-        `UPDATE contracts SET total_contract_value = $1 WHERE id = $2`,
-        [annual_rent, id]
-      );
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ Contract not found",
+      });
     }
 
     res.json({
       success: true,
-      message: "✅ Contract updated successfully",
-      data: updatedContract,
+      message: "✅ تم تحديث بيانات العقد بنجاح",
+      data: result.rows[0],
     });
   } catch (err) {
     console.error("❌ Error updating contract:", err);
@@ -612,6 +624,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     });
   }
 });
+
 
 
 /* =========================================================
@@ -641,19 +654,17 @@ router.put("/:id/property", verifyToken, async (req, res) => {
       `
       UPDATE properties
       SET 
-        property_name = COALESCE($1, property_name),
-        property_type = COALESCE($2, property_type),
-        property_usage = COALESCE($3, property_usage),
-        national_address = COALESCE($4, national_address),
-        title_deed_no = COALESCE($5, title_deed_no),
-        num_units = COALESCE($6, num_units),
+        property_type = COALESCE($1, property_type),
+        property_usage = COALESCE($2, property_usage),
+        national_address = COALESCE($3, national_address),
+        title_deed_no = COALESCE($4, title_deed_no),
+        num_units = COALESCE($5, num_units),
         updated_at = NOW()
-      WHERE id = $7
+      WHERE id = $6
       `,
       [
-        p.property_name,
-        p.property_type,
-        p.property_usage,
+        p.property_type || p.type || p.property_name,
+        p.property_usage || p.usage,
         p.national_address,
         p.title_deed_no,
         p.num_units,

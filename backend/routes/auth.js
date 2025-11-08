@@ -193,7 +193,7 @@ router.post("/verify-otp", async (req, res) => {
         activeRole,
         role_id: activeRoleId,
       },
-      process.env.JWT_SECRET || "secret-key",
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
