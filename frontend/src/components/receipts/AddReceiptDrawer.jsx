@@ -179,7 +179,10 @@ export default function AddReceiptDrawer({ open, setOpen, refresh }) {
   // 💾 حفظ السند
   async function handleSave() {
     if (!user?.token) return toast.error("الرجاء تسجيل الدخول أولاً");
-    if (user.roles?.includes("tenant")) return toast.error("🚫 لا تملك صلاحية لإضافة سند");
+    if (!["office", "admin_office"].includes(user.activeRole)) {
+      return toast.error("🚫 لا تملك صلاحية لإضافة سند");
+  }
+
     if (!validateForm()) return;
 
     setSaving(true);
