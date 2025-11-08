@@ -27,7 +27,10 @@ export default function PropertiesList() {
   const activeRole = user?.activeRole;
 
   // 🔒 صلاحيات الإضافة
-  const canAdd = ["admin", "office_admin", "office"].includes(activeRole);
+  const canAdd = ["admin",
+    // "office_admin",
+    //  "office"
+     ].includes(activeRole);
 
   // 🏢 تحميل العقارات الخاصة بالمستخدم الحالي
   async function fetchProperties() {
