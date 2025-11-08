@@ -23,7 +23,7 @@ export default function Settings() {
     if (!user?.token) return;
     async function fetchUser() {
       try {
-        const res = await fetch(`${API_URL}/users/me`, {
+        const res = await fetch(`${API_URL}/me`, {
           headers: {
             "x-api-key": API_KEY,
             Authorization: `Bearer ${user.token}`,
@@ -56,7 +56,7 @@ export default function Settings() {
     if (!user?.token) return toast.error("الرجاء تسجيل الدخول أولاً");
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/users/update-profile`, {
+      const res = await fetch(`${API_URL}/update-profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

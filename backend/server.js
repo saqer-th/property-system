@@ -90,6 +90,7 @@ import adminRoutes from "./routes/admin.js";
 import officesRoutes from "./routes/offices.js";
 import userPermissionsRoutes from "./routes/permissions.js";
 import remindersRouter from "./routes/reminders.js";
+import Users from "./routes/users.js";
 
 // =======================================
 // 🔗 ربط المسارات
@@ -107,7 +108,7 @@ app.use("/admin", adminRoutes);
 app.use("/offices", officesRoutes);
 app.use("/admin", userPermissionsRoutes);
 app.use("/reminders", remindersRouter);
-
+app.use("/users", Users);
 // =======================================
 // ✅ فallback headers لـ CORS (احتياطي)
 app.use((req, res, next) => {
