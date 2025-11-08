@@ -86,7 +86,7 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
           return contract.brokerage_entity || {};
         case "property":
           return contract.property || {
-            title_deed_no: contract.property.title_deed_no || "",
+            title_deed_no: contract.title_deed_no || "",
             property_type: contract.property_type || "",
             national_address: contract.national_address || "",
             num_units: contract.num_units || "",
