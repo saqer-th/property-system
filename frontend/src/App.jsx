@@ -1,6 +1,19 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
+// 🌍 الترجمة والتنسيق
+import "@/i18n";
+import "@/index.css";
+
+// 🔐 الحماية والسياق
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { AuthProvider } from "@/context/AuthContext";
+
+// 🧱 الصفحات العامة
+import Login from "@/pages/Auth/Login";
+import Unauthorized from "@/pages/Auth/Unauthorized";
+import RegisterOffice from "@/pages/Auth/RegisterOffice";
+
 // 📊 لوحة التحكم العامة
 import Dashboard from "@/pages/Dashboard";
 
@@ -22,10 +35,10 @@ import ExpensesList from "@/pages/Expenses/ExpensesList";
 import ReceiptsList from "@/pages/Receipts/ReceiptsList";
 import MaintenanceList from "@/pages/Maintenance/MaintenanceList";
 
-// 🔐 الدخول
-import Login from "@/pages/Auth/Login";
-import Unauthorized from "@/pages/Auth/Unauthorized";
-import RegisterOffice from "@/pages/Auth/RegisterOffice";
+// 🧾 التذكيرات
+import RemindersLog from "@/pages/offices/RemindersLog";
+import RemindersSettings from "@/pages/offices/RemindersSettings";
+import TemplatesPreview from "@/pages/offices/TemplatesPreview";
 
 // 🧱 لوحة الأدمن
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -34,36 +47,24 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import OfficeDetails from "@/pages/offices/OfficeDetails";
 import EmployeesList from "@/pages/offices/Employees/EmployeesList";
 
-// 🔔 التذكيرات (Reminders)
-import RemindersSettings from "@/pages/offices/RemindersSettings";
-import RemindersLog from "@/pages/offices/RemindersLog";
-import TemplatesPreview from "@/pages/offices/TemplatesPreview";
-
-// 🧱 الحماية والسياق
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { AuthProvider } from "@/context/AuthContext";
-
-// 🌍 الترجمة والتنسيق
-import "@/i18n";
-import "@/index.css";
+// ⚙️ الإعدادات
+import Settings from "@/pages/Settings";
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* 🔐 صفحة الدخول */}
+          {/* ==========================
+              🔓 صفحات عامة (بدون صلاحيات)
+              ========================== */}
           <Route path="/login" element={<Login />} />
-
-          {/* 🚫 صفحة عدم الصلاحية */}
           <Route path="/unauthorized" element={<Unauthorized />} />
-
-          {/* 🏢 تسجيل مكتب جديد */}
           <Route path="/register-office" element={<RegisterOffice />} />
 
-          {/* ================================
+          {/* ==========================
               🔒 صفحات محمية بالصلاحيات
-              ================================ */}
+              ========================== */}
 
           {/* 📊 لوحة التحكم */}
           <Route
@@ -71,6 +72,16 @@ export default function App() {
             element={
               <ProtectedRoute page="dashboard">
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ⚙️ الإعدادات */}
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute page="settings">
+                <Settings />
               </ProtectedRoute>
             }
           />
@@ -95,7 +106,35 @@ export default function App() {
             }
           />
 
-          {/* 🏢 قائمة الأملاك */}
+          {/* 📜 سجل التذكيرات */}
+          <Route
+            path="/office/reminders/log"
+            element={
+              <ProtectedRoute page="reminders">
+                <RemindersLog />
+              </ProtectedRoute>
+            }
+          />
+          {/* ⚙️ إعدادات التذكيرات */}
+          <Route
+            path="/office/reminders/settings"
+            element={
+              <ProtectedRoute page="reminders">
+                <RemindersSettings />
+              </ProtectedRoute>
+            }
+          />
+          {/* 👁️ معاينة القوالب */}
+          <Route
+            path="/office/reminders/templates"
+            element={
+              <ProtectedRoute page="reminders">
+                <TemplatesPreview />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 🏢 الأملاك */}
           <Route
             path="/properties"
             element={
@@ -104,8 +143,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* 🏢 تفاصيل العقار */}
           <Route
             path="/properties/:id"
             element={
@@ -115,7 +152,7 @@ export default function App() {
             }
           />
 
-          {/* 🏘️ تفاصيل الوحدة */}
+          {/* 🏘️ الوحدات */}
           <Route
             path="/units/:id"
             element={
@@ -134,8 +171,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* ➕ إضافة عقد */}
           <Route
             path="/contracts/add"
             element={
@@ -144,8 +179,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* 📄 تفاصيل العقد */}
           <Route
             path="/contracts/:id"
             element={
@@ -194,19 +227,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-
-          {/* 📜 سجل التذكيرات */}
-          <Route
-            path="/office/reminders/log"
-            element={
-              <ProtectedRoute page="reminders">
-                <RemindersLog />
-              </ProtectedRoute>
-            }
-          />
-
-
 
           {/* 🛡️ لوحة الأدمن */}
           <Route
