@@ -249,7 +249,7 @@ export default function ContractDetails() {
           icon={<Building2 className="text-gray-600" />}
           title={t("propertyInfo")}
           data={[
-            { label: t("propertyType"), value: contract.property?.type },
+            { label: t("propertyType"), value: contract.property?.property_name },
             { label: t("propertyUsage"), value: contract.property?.usage },
             { label: t("numUnits"), value: contract.property?.num_units },
             { label: t("nationalAddress"), value: contract.property?.national_address },

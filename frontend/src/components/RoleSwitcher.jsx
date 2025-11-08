@@ -5,8 +5,9 @@ import { Building2, Home, User, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { API_URL, API_KEY } from "@/config";
-
+import { useTranslation } from "react-i18next";
 export default function RoleSwitcher() {
+  const { t, i18n } = useTranslation();
   const { user, setUserRoleView, refreshUser } = useAuth();
   const [activeRole, setActiveRole] = useState(user?.activeRole || user?.roles?.[0]);
   const [loadingRole, setLoadingRole] = useState(null);
@@ -28,11 +29,11 @@ export default function RoleSwitcher() {
   };
 
   const labels = {
-    owner: "مالك",
-    tenant: "مستأجر",
-    office: "مكتب",
-    admin: "مشرف عام",
-    office_admin: "مشرف مكتب",
+    owner: t("owner"),
+    tenant: t("tenant"),
+    office: t("office"),
+    admin: t("admin"),
+    office_admin: t("office_admin"),
   };
 
   // 🔄 تبديل الدور من السيرفر مباشرة

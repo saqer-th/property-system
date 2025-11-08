@@ -152,7 +152,7 @@ export default function ExpensesList() {
   const formatDate = (d) => (d ? new Date(d).toISOString().split("T")[0] : "—");
 
   const formatAmount = (num) =>
-    Number(num || 0).toLocaleString("ar-SA", {
+    Number(num || 0).toLocaleString("en-EN", {
       style: "currency",
       currency: "SAR",
       minimumFractionDigits: 2,

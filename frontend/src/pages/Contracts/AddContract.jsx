@@ -177,47 +177,77 @@ export default function AddContract() {
       setLoading(false);
     }
   }
+// 📱 تحقق من رقم الجوال السعودي
+function isValidSaudiPhone(phone) {
+  // يقبل +9665XXXXXXXX أو 05XXXXXXXX
+  const regex = /^(?:\+9665|05)[0-9]{8}$/;
+  return regex.test(phone);
+}
 
-  function validateContract(data) {
-    const errors = [];
+// 🪪 تحقق من رقم الهوية الوطنية (10 أرقام)
+function isValidSaudiID(id) {
+  const regex = /^[0-9]{10}$/;
+  return regex.test(id);
+}
 
-    if (!data.contract_no) errors.push("Contract number");
-    if (!data.tenancy_start) errors.push("Start date");
-    if (!data.tenancy_end) errors.push("End date");
-    if (!data.annual_rent) errors.push("Annual rent");
-    if (!data.total_contract_value) errors.push("Total contract value");
-    if (!data.title_deed_no) errors.push("Title deed number");
+// 📧 تحقق من البريد الإلكتروني
+function isValidEmail(email) {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return regex.test(email);
+}
+  // ✅ تحقق من صحة البيانات قبل الحفظ
+function validateContract(data) {
+  const errors = [];
 
-    // 👤 المؤجر (Lessor)
-    if (!data.lessors?.length) {
-      errors.push("Lessor information");
-    } else {
-      const l = data.lessors[0];
-      if (!l.name) errors.push("Lessor name");
-      if (!l.id) errors.push("Lessor ID number");
-      if (!l.phone) errors.push("Lessor phone");
-    }
+  if (!data.contract_no) errors.push("رقم العقد");
+  if (!data.tenancy_start) errors.push("تاريخ بداية العقد");
+  if (!data.tenancy_end) errors.push("تاريخ نهاية العقد");
+  if (!data.annual_rent) errors.push("قيمة الإيجار السنوي");
+  if (!data.total_contract_value) errors.push("إجمالي قيمة العقد");
+  if (!data.title_deed_no) errors.push("رقم الصك أو التملك");
 
-    // 👥 المستأجر (Tenant)
-    if (!data.tenants?.length) {
-      errors.push("Tenant information");
-    } else {
-      const t = data.tenants[0];
-      if (!t.name) errors.push("Tenant name");
-      if (!t.id) errors.push("Tenant ID number");
-      if (!t.phone) errors.push("Tenant phone");
-    }
-
-    if (!data.property?.property_type) errors.push("Property type");
-    if (!data.property?.property_usage) errors.push("Property usage");
-    if (!data.property?.num_units) errors.push("Number of units");
-    if (!data.property?.national_address) errors.push("National address");
-
-    if (!data.payments?.length) errors.push("At least one payment must be added");
-
-    // You can add more fine-grained validation if you wish
-    return errors;
+  // 👤 المؤجر
+  if (!data.lessors?.length) {
+    errors.push("بيانات المؤجر مفقودة");
+  } else {
+    const l = data.lessors[0];
+    if (!l.name) errors.push("اسم المؤجر");
+    if (!l.id) errors.push("رقم هوية المؤجر");
+    else if (!isValidSaudiID(l.id))
+      errors.push("رقم هوية المؤجر غير صالح (يجب أن يتكون من 10 أرقام)");
+    if (!l.phone) errors.push("رقم جوال المؤجر");
+    else if (!isValidSaudiPhone(l.phone))
+      errors.push("رقم جوال المؤجر غير صحيح (مثال: 0501234567)");
+    if (l.email && !isValidEmail(l.email))
+      errors.push("البريد الإلكتروني للمؤجر غير صحيح");
   }
+
+  // 👥 المستأجر
+  if (!data.tenants?.length) {
+    errors.push("بيانات المستأجر مفقودة");
+  } else {
+    const t = data.tenants[0];
+    if (!t.name) errors.push("اسم المستأجر");
+    if (!t.id) errors.push("رقم هوية المستأجر");
+    else if (!isValidSaudiID(t.id))
+      errors.push("رقم هوية المستأجر غير صالح (10 أرقام)");
+    if (!t.phone) errors.push("رقم جوال المستأجر");
+    else if (!isValidSaudiPhone(t.phone))
+      errors.push("رقم جوال المستأجر غير صحيح (مثال: 0509876543)");
+  }
+
+  // 🏢 العقار
+  if (!data.property?.property_type) errors.push("نوع العقار");
+  if (!data.property?.property_usage) errors.push("استخدام العقار");
+  if (!data.property?.num_units) errors.push("عدد الوحدات");
+  if (!data.property?.national_address) errors.push("العنوان الوطني");
+
+  // 💰 الدفعات
+  if (!data.payments?.length) errors.push("يجب إضافة دفعة واحدة على الأقل");
+
+  return errors;
+}
+
 
   // 💾 حفظ العقد
   // 💾 حفظ العقد (محدث لدعم verifyToken والربط مع المستخدم)

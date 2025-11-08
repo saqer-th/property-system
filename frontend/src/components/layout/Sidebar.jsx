@@ -52,7 +52,7 @@ export default function Sidebar() {
 
 
   // 🔔 قسم التذكيرات — متاح للمكتب والمشرف
-  if (["office", "office_admin"].includes(user?.activeRole)) {
+  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
     officeMenu.push(
       { divider: true },
 
@@ -72,16 +72,7 @@ export default function Sidebar() {
       label: t("menu_admin_dashboard") || "لوحة الأدمن",
       path: "/admin/dashboard",
     },
-    {
-      icon: <Users size={18} />,
-      label: t("menu_admin_users") || "إدارة المستخدمين",
-      path: "/admin/users",
-    },
-    {
-      icon: <ClipboardList size={18} />,
-      label: t("menu_admin_audit") || "سجل العمليات",
-      path: "/admin/audit",
-    },
+    
   ];
 
   // ⚙️ الإعدادات العامة
@@ -97,7 +88,7 @@ export default function Sidebar() {
   let finalMenu = [...generalMenu];
 
   // 📦 إضافة قائمة المكتب
-  if (["office", "office_admin"].includes(user?.activeRole)) {
+  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
     finalMenu.push({ divider: true }, ...officeMenu);
   }
 

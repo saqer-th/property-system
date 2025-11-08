@@ -157,7 +157,7 @@ const activeRole = user.activeRole; // من السياق أو الحالة
   ]);
 
   const formatCurrency = (val) =>
-    new Intl.NumberFormat("ar-SA", {
+    new Intl.NumberFormat("en-EN", {
       style: "currency",
       currency: "SAR",
       minimumFractionDigits: 0,

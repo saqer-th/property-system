@@ -138,7 +138,6 @@
   "brokeragePhone": "رقم الجوال",
   "brokerageAddress": "عنوان المكتب",
   "property": "العقار",
-  "propertyType": "نوع العقار",
   "propertyUsage": "الاستخدام",
   "numUnits": "عدد الوحدات",
   "nationalAddress": "العنوان الوطني",
@@ -184,7 +183,6 @@
   "addProperty": "إضافة عقار",
   "propertyAdded": "تمت إضافة العقار بنجاح",
   "propertyName": "اسم العقار",
-  "propertyType": "نوع العقار",
   "city": "المدينة",
   "nationalAddress": "العنوان الوطني",
   "numUnits": "عدد الوحدات",
@@ -250,7 +248,6 @@
   "relatedTo": "مرتبط بـ",
   "receiptNo": "رقم السند",
     "contractsTable": "قائمة العقود التفصيلية",
-  "propertyType": "نوع العقار",
   "unitNo": "رقم الوحدة",
   "unitType": "نوع الوحدة",
   "paid": "المدفوع",
@@ -311,10 +308,27 @@
   "advanceBalance": "رصيد مقدم",
   "totalDueWithExpenses": "إجمالي المستحق مع المصروفات",
   "tenantExpenses": "مصروفات المستأجر",
-  "remainingAmount": "المبلغ المتبقي"
-
-
-
-
-
+  "remainingAmount": "المبلغ المتبقي",
+  "allStatuses": "جميع الحالات",
+  "allProperties": "جميع العقارات",
+  "resetFilters": "إعادة تعيين الفلاتر",
+  "dueSoon": "مستحق قريبا 30 يوم",
+  "office_admin": "مشرف مكتب",
+  "tenantPhone": "جوال المستأجر",
+  "tenancyStart": "تاريخ بدء الإيجار",
+  "tenancyEnd": "تاريخ نهاية الإيجار",
+  "onOwner": "على المالك",
+  "onTenant": "على المستأجر",
+  "onOffice": "على المكتب",
+  "paidBy": "دفع بواسطة",
+  "linkedTo": "مرتبط بـ",
+  "onWhom": "على من",
+  "expenseType": "نوع المصروف",
+  "allTypes": "جميع الأنواع",
+  "allBeneficiaries": "جميع المستفيدين",
+  "propertyType": "اسم العقار",
+  "property_name": "اسم العقار",
+  "usage": "الاستخدام",
+  "num_units": "عدد الوحدات",
+  "national_address": "العنوان الوطني"
 }

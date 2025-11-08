@@ -147,7 +147,6 @@
   "brokeragePhone": "Phone Number",
   "brokerageAddress": "Office Address",
   "property": "Property",
-  "propertyType": "Property Type",
   "propertyUsage": "Usage",
   "numUnits": "Number of Units",
   "nationalAddress": "National Address",
@@ -193,7 +192,6 @@
   "addProperty": "Add Property",
   "propertyAdded": "Property added successfully",
   "propertyName": "Property Name",
-  "propertyType": "Property Type",
   "city": "City",
   "nationalAddress": "National Address",
   "numUnits": "Number of Units",
@@ -259,7 +257,7 @@
   "relatedTo": "Related To",
   "receiptNo": "Receipt No.",
     "contractsTable": "Detailed Contracts Table",
-  "propertyType": "Property Type",
+  "propertyType": "Property Name",
   "unitNo": "Unit No",
   "unitType": "Unit Type",
   "paid": "Paid",
@@ -268,7 +266,10 @@
   "nextPaymentAmount": "Next Payment Amount",
   "menu_office_panel": "Real Estate Office Panel",
   "reminderLog": "Reminder Log",
-  "menu_reminders": "Reminders"
+  "menu_reminders": "Reminders",
+  "menu_receipts": "Receipts",
+  "office_admin": "Office Admin",
+  "menu_admin_dashboard": "Admin Dashboard"
 
 
 }

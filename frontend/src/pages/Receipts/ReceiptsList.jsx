@@ -150,7 +150,7 @@ export default function ReceiptsList() {
 
   const formatCurrency = (num) =>
     Number(num || 0).toLocaleString(
-      i18n.language === "ar" ? "ar-SA" : "en-US",
+      i18n.language === "ar" ? "en-EN" : "en-US",
       {
         style: "currency",
         currency: "SAR",

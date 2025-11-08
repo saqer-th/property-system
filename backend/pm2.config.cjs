@@ -1,9 +1,16 @@
+const os = require("os");
+const path = require("path");
+
+const isWindows = os.platform() === "win32";
+
 module.exports = {
   apps: [
     {
       name: "property-system",
       script: "server.js",
-      cwd: "/root/property-system/backend", // 👈 يغيّر مجلد العمل إلى backend
+      cwd: isWindows
+        ? "C:/Users/Saqriii/property-system/backend" // 💻 جهازك المحلي (Windows)
+        : "/root/property-system/backend",            // ☁️ السيرفر (Linux)
       exec_mode: "fork",
       instances: 1,
       watch: false,
@@ -11,8 +18,10 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 8085,
-        PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser"
-      }
-    }
-  ]
+        ...(isWindows
+          ? {}
+          : { PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser" }),
+      },
+    },
+  ],
 };

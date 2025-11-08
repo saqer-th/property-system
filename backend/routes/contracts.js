@@ -1255,7 +1255,7 @@ router.get("/:id", verifyToken, async (req, res) => {
       annual_rent: Number(base.annual_rent || 0),
       total_contract_value: Number(base.total_contract_value || 0),
       property: {
-        type: base.property_type,
+        property_name: base.property_type,
         usage: base.property_usage,
         num_units: base.num_units,
         national_address: base.national_address,
