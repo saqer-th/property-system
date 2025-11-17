@@ -245,7 +245,7 @@ export default function ReportsHome() {
               key={index}
               className={`p-5 rounded-2xl shadow-md transition-all duration-300
                 bg-gradient-to-br ${cat.color} border border-gray-200/50
-                hover:shadow-xl hover:-translate-y-1 backdrop-blur-xl`}
+                hover:shadow-lg hover:-translate-y-1 hover:bg-white/80 backdrop-blur-xl`}
             >
               <div className="flex items-center gap-3 mb-4">
                 {cat.icon}
