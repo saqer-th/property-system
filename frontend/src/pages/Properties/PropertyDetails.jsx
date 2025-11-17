@@ -140,16 +140,19 @@ export default function PropertyDetails() {
               <b>{t("titleDeedNo")}:</b> {property.title_deed_no || "—"}
             </p>
             <p>
-              <b>{t("propertyType")}:</b> {property.property_type || "—"}
+              <b>{t("propertyType")}:</b> {property.property_name || "—"}
             </p>
             <p>
-              <b>{t("propertyUsage")}:</b> {property.property_usage || "—"}
+              <b>{t("propertyUsage")}:</b> {property.usage || "—"}
             </p>
             <p>
               <b>{t("numUnits")}:</b> {property.num_units || 0}
             </p>
             <p>
               <b>{t("nationalAddress")}:</b> {property.national_address || "—"}
+            </p>
+            <p>
+              <b>{t("city")}:</b> {property.city || "—"}
             </p>
           </CardContent>
         </Card>
@@ -220,7 +223,7 @@ export default function PropertyDetails() {
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              (window.location.href = `/units/${u.id}`)
+                              (window.location.href = `/units/${u.unit_id}`)
                             }
                           >
                             {t("viewDetails")}
@@ -244,8 +247,9 @@ export default function PropertyDetails() {
               if (!val) window.location.reload();
             }}
             section="property"
-            contract={property}
-            setContract={setProperty}
+            property={property}
+            refresh={() => window.location.reload()}
+
           />
         )}
 

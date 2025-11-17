@@ -47,40 +47,25 @@ router.get("/my", verifyToken, async (req, res) => {
         SELECT 
           e.id, e.expense_scope, e.description, e.amount, e.expense_type,
           e.paid_by, e.on_whom, e.settlement_type, e.settlement_timing, e.date,
-          e.property_id, e.unit_id, e.contract_id, e.office_id,
+          e.property_id, e.unit_id, e.contract_id, 
+          COALESCE(c.office_id, p.office_id, e.office_id) AS office_id,
           p.property_type AS property_name, 
           u.unit_no, 
           c.contract_no,
-          COALESCE(o.name, o2.name, o3.name) AS office_name
+          (
+            SELECT name 
+            FROM offices 
+            WHERE id = COALESCE(c.office_id, p.office_id, e.office_id)
+          ) AS office_name
         FROM expenses e
         LEFT JOIN contracts c ON c.id = e.contract_id
-        LEFT JOIN offices o ON o.id = c.office_id
         LEFT JOIN properties p ON p.id = e.property_id
-        LEFT JOIN offices o2 ON o2.id = p.office_id
         LEFT JOIN units u ON u.id = e.unit_id
-        LEFT JOIN offices o3 ON o3.id = e.office_id
         WHERE 
-          (
-            -- 🔹 مصروف مرتبط بعقد تابع للمكتب
-            c.office_id IN (
-              SELECT id FROM offices WHERE owner_id = $1
-              UNION
-              SELECT office_id FROM office_users WHERE user_id = $1
-            )
-
-            -- 🔹 مصروف مرتبط بعقار تابع للمكتب
-            OR o2.id IN (
-              SELECT id FROM offices WHERE owner_id = $1
-              UNION
-              SELECT office_id FROM office_users WHERE user_id = $1
-            )
-
-            -- 🔹 مصروف عام تابع للمكتب (بدون عقد أو عقار)
-            OR e.office_id IN (
-              SELECT id FROM offices WHERE owner_id = $1
-              UNION
-              SELECT office_id FROM office_users WHERE user_id = $1
-            )
+          COALESCE(c.office_id, p.office_id, e.office_id) IN (
+            SELECT id FROM offices WHERE owner_id = $1
+            UNION
+            SELECT office_id FROM office_users WHERE user_id = $1
           )
         ORDER BY e.date DESC, e.id DESC;
       `;
@@ -293,5 +278,35 @@ router.post("/", verifyToken, async (req, res) => {
   }
 });
 
+router.get("/by-contract/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
 
+  try {
+    const query = `
+      SELECT 
+        e.id,
+        e.amount,
+        e.expense_type,
+        e.notes,
+        TO_CHAR(e.date, 'YYYY-MM-DD') AS date
+      FROM expenses e
+      WHERE e.contract_id = $1
+      ORDER BY e.date DESC
+    `;
+
+    const { rows } = await pool.query(query, [id]);
+
+    return res.json({
+      success: true,
+      data: rows,
+    });
+
+  } catch (err) {
+    console.error("❌ Error fetching contract expenses:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Error loading contract expenses",
+    });
+  }
+});
 export default router;

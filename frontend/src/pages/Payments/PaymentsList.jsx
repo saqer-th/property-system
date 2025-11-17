@@ -261,7 +261,9 @@ const activeRole = user.activeRole; // من السياق أو الحالة
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>
                       <th className="p-2">{t("contract")}</th>
-                      <th className="p-2">{t("tenantName")}</th>
+                      <th className="p-2">
+                        {activeRole === "tenant" ? t("ownerName") : t("tenantName")}
+                        </th>
                       <th className="p-2">{t("amount")}</th>
                       <th className="p-2">{t("paidAmount")}</th>
                       <th className="p-2">{t("remainingAmount")}</th>
@@ -296,7 +298,8 @@ const activeRole = user.activeRole; // من السياق أو الحالة
                       return (
                         <tr key={idx} className="border-b hover:bg-emerald-50 transition">
                           <td className="p-2">{p.contract_no || "—"}</td>
-                          <td className="p-2">{p.tenant_name || "—"}</td>
+                          <td className="p-2">
+                            {activeRole === "tenant" ? p.lessor_name : p.tenant_name}</td>
                           <td className="p-2 text-emerald-700 font-medium">
                             {formatCurrency(p.amount)}
                           </td>

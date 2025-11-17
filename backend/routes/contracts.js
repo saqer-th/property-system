@@ -33,11 +33,13 @@ router.get("/my", verifyToken, async (req, res) => {
       case "office":
       case "office_admin":
         whereClause = `
-    c.office_id = (
-      SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1
-    )
-    OR c.office_id IN (
-      SELECT id FROM offices WHERE owner_id = $1
+    (
+      c.office_id IN (
+        SELECT office_id FROM office_users WHERE user_id = $1
+      )
+      OR c.office_id IN (
+        SELECT id FROM offices WHERE owner_id = $1
+      )
     )
   `;
         params = [userId];
@@ -80,67 +82,91 @@ router.get("/my", verifyToken, async (req, res) => {
        📊 الاستعلام الموحد (لكل الأدوار)
     ========================================================= */
     const query = `
-      SELECT DISTINCT ON (c.id)
-        c.id, c.contract_no, c.annual_rent, c.tenancy_start, c.tenancy_end,
-        p.id AS property_id, p.property_type, p.property_usage,
-        u.id AS unit_id, u.unit_no, u.unit_type,
-        o.name AS office_name,
-        (SELECT name FROM parties pt 
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-         LIMIT 1) AS tenant_name,
-        (SELECT phone FROM parties pt 
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-         LIMIT 1) AS tenant_phone,
-        (SELECT name FROM parties pl 
-         JOIN contract_parties cp ON cp.party_id = pl.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-         LIMIT 1) AS lessor_name,
-        (
-          COALESCE((SELECT SUM(p2.amount) FROM payments p2 WHERE p2.contract_id = c.id), 0)
-          + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
-        ) AS total_value_calculated,
-        COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
-        AS total_paid,
-        GREATEST(
+        SELECT DISTINCT ON (c.id)
+          c.id, c.contract_no, c.annual_rent, c.tenancy_start, c.tenancy_end,
+          p.id AS property_id, p.property_type, p.property_usage,p.city,
+          u.id AS unit_id, u.unit_no, u.unit_type,
+          o.name AS office_name,
+
+          -- المستأجر
+          (SELECT name FROM parties pt 
+            JOIN contract_parties cp ON cp.party_id = pt.id
+            WHERE cp.contract_id = c.id 
+              AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+            LIMIT 1) AS tenant_name,
+
+          (SELECT phone FROM parties pt 
+            JOIN contract_parties cp ON cp.party_id = pt.id
+            WHERE cp.contract_id = c.id 
+              AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+            LIMIT 1) AS tenant_phone,
+
+          -- المؤجر
+          (SELECT name FROM parties pl 
+            JOIN contract_parties cp ON cp.party_id = pl.id
+            WHERE cp.contract_id = c.id 
+              AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+            LIMIT 1) AS lessor_name,
+
+          -- إجمالي العقد
           (
+            COALESCE((SELECT SUM(p2.amount) FROM payments p2 WHERE p2.contract_id = c.id), 0)
+            + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
+          ) AS total_value_calculated,
+
+          -- المدفوع
+          COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
+          AS total_paid,
+
+          -- المتبقي
+          GREATEST(
             (
-              COALESCE((SELECT SUM(p4.amount) FROM payments p4 WHERE p4.contract_id = c.id), 0)
-              + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
-            )
-            - COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
-          ),
-          0
-        ) AS total_remaining,
-        GREATEST(
-          (
-            COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
-            - (
-              COALESCE((SELECT SUM(p4.amount) FROM payments p4 WHERE p4.contract_id = c.id), 0)
-              + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
-            )
-          ),
-          0
-        ) AS advance_balance,
-        (SELECT due_date FROM payments 
-         WHERE contract_id = c.id AND (status IS NULL OR status NOT IN ('مدفوعة','Cancelled','paid'))
-         ORDER BY due_date ASC LIMIT 1) AS next_payment_date,
-        (SELECT amount FROM payments 
-         WHERE contract_id = c.id AND (status IS NULL OR status NOT IN ('مدفوعة','Cancelled','paid'))
-         ORDER BY due_date ASC LIMIT 1) AS next_payment_amount,
-        CASE
-          WHEN c.tenancy_end IS NULL THEN 'نشط'
-          WHEN c.tenancy_end >= CURRENT_DATE THEN 'نشط'
-          ELSE 'منتهي'
-        END AS contract_status
-      FROM contracts c
-      LEFT JOIN properties p ON p.id = c.property_id
-      LEFT JOIN units u ON u.contract_id = c.id
-      LEFT JOIN offices o ON o.id = c.office_id
-      WHERE ${whereClause}
-      ORDER BY c.id DESC;
+              (
+                COALESCE((SELECT SUM(p4.amount) FROM payments p4 WHERE p4.contract_id = c.id), 0)
+                + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
+              )
+              - COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
+            ),
+            0
+          ) AS total_remaining,
+
+          -- الرصيد المتقدم
+          GREATEST(
+            (
+              COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.contract_id = c.id AND r.receipt_type = 'قبض'), 0)
+              - (
+                COALESCE((SELECT SUM(p4.amount) FROM payments p4 WHERE p4.contract_id = c.id), 0)
+                + COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.contract_id = c.id AND e.on_whom = 'مستأجر'), 0)
+              )
+            ),
+            0
+          ) AS advance_balance,
+
+          -- الدفعة القادمة
+          (SELECT due_date FROM payments 
+            WHERE contract_id = c.id AND (status IS NULL OR status NOT IN ('مدفوعة','Cancelled','paid'))
+            ORDER BY due_date ASC LIMIT 1) AS next_payment_date,
+
+          (SELECT amount FROM payments 
+            WHERE contract_id = c.id AND (status IS NULL OR status NOT IN ('مدفوعة','Cancelled','paid'))
+            ORDER BY due_date ASC LIMIT 1) AS next_payment_amount,
+
+          -- حالة العقد
+          CASE
+            WHEN c.tenancy_end IS NULL THEN 'نشط'
+            WHEN c.tenancy_end >= CURRENT_DATE THEN 'نشط'
+            ELSE 'منتهي'
+          END AS contract_status
+
+        FROM contracts c
+        LEFT JOIN properties p ON p.id = c.property_id
+        LEFT JOIN contract_units cu ON cu.contract_id = c.id
+        LEFT JOIN units u ON u.id = cu.unit_id
+        LEFT JOIN offices o ON o.id = c.office_id
+        WHERE ${whereClause}
+        ORDER BY c.id DESC;
     `;
+
 
     const { rows } = await pool.query(query, params);
 
@@ -175,7 +201,7 @@ router.get("/my", verifyToken, async (req, res) => {
 
 
 /* =========================================================
-   🧩 2️⃣ إنشاء عقد جديد مع إنشاء المستخدمين تلقائيًا + ربط المكتب
+   🧩 2️⃣ إنشاء عقد جديد مع إنشاء المستخدمين تلقائيًا + ربط المكتب + ربط الوحدات بطريقة احترافية
    ========================================================= */
 router.post("/full", verifyToken, async (req, res) => {
   const c = req.body;
@@ -184,60 +210,45 @@ router.post("/full", verifyToken, async (req, res) => {
 
   try {
     await client.query("BEGIN");
-    // =============================================
-    // 🧾 1️⃣ تحديد الـ office_id بشكل ذكي لجميع الأدوار
-    // =============================================
-    // =============================================
-    // 🧭 تحديد الـ office_id بشكل ذكي لجميع الحالات
-    // =============================================
+
+    /* =========================================================
+       🧭 1️⃣ تحديد الـ OFFICE_ID
+    ========================================================= */
     let officeId = null;
 
-    // 🔹 1️⃣ تحقق إذا المستخدم مالك مكتب
     const ownOffice = await client.query(
       "SELECT id FROM offices WHERE owner_id = $1 LIMIT 1",
       [userId]
     );
-    if (ownOffice.rows.length > 0) {
+    if (ownOffice.rowCount > 0) {
       officeId = ownOffice.rows[0].id;
     }
 
-    // 🔹 2️⃣ إذا ما كان مالك، تحقق إذا هو موظف أو مشرف في مكتب
     if (!officeId) {
       const empOffice = await client.query(
         "SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1",
         [userId]
       );
-      if (empOffice.rows.length > 0) {
+      if (empOffice.rowCount > 0) {
         officeId = empOffice.rows[0].office_id;
       }
     }
 
-    // 🔹 3️⃣ إذا ما طلع شيء، نتركه null ونطبع تحذير فقط
-    if (!officeId) {
-      console.warn(`⚠️ المستخدم ${userId} لا يملك مكتب ولا مرتبط بأي مكتب في office_users`);
-    }
-
-
-
-    // =============================================
-    // 🧩 0️⃣ تحقق من تكرار رقم العقد
-    // =============================================
+    /* =========================================================
+       🧩 0️⃣ تحقق تكرار رقم العقد داخل نفس المكتب
+    ========================================================= */
     if (c.contract_no) {
-      const officeParam = officeId ? Number(officeId) : null;
-      const existing = await client.query(
-           `
-    SELECT id
-    FROM contracts
-    WHERE contract_no = $1
-      AND (
-        (office_id = $2)
-        OR (office_id IS NULL AND $2 IS NULL)
-      )
-    LIMIT 1
-    `,
-        [c.contract_no, officeParam]
+      const check = await client.query(
+        `
+        SELECT id FROM contracts
+        WHERE contract_no = $1
+          AND (office_id = $2)
+        LIMIT 1
+        `,
+        [c.contract_no, officeId]
       );
-      if (existing.rows.length > 0) {
+
+      if (check.rowCount > 0) {
         await client.query("ROLLBACK");
         return res.status(400).json({
           success: false,
@@ -246,30 +257,31 @@ router.post("/full", verifyToken, async (req, res) => {
       }
     }
 
-    // =============================================
-    // 2️⃣ التحقق من مجموع الدفعات
-    // =============================================
-    const totalValue = parseFloat(c.total_contract_value || c.annual_rent || 0);
+    /* =========================================================
+       2️⃣ التحقق من مجموع الدفعات
+    ========================================================= */
+    const totalValue = Number(c.total_contract_value || c.annual_rent || 0);
     const paymentsTotal = (c.payments || [])
-      .map((p) => parseFloat(p.amount || 0))
+      .map((p) => Number(p.amount || 0))
       .reduce((a, b) => a + b, 0);
 
-    if (totalValue > 0 && paymentsTotal > 0 && paymentsTotal !== totalValue) {
+    if (totalValue > 0 && paymentsTotal > 0 && totalValue !== paymentsTotal) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
-        message: `❌ مجموع الدفعات (${paymentsTotal}) لا يطابق قيمة العقد (${totalValue}).`,
+        message: `❌ مجموع الدفعات (${paymentsTotal}) لا يساوي قيمة العقد (${totalValue}).`,
       });
     }
 
-    // =============================================
-    // 3️⃣ إنشاء العقد الأساسي
-    // =============================================
+    /* =========================================================
+       3️⃣ إنشاء العقد
+    ========================================================= */
     const contractRes = await client.query(
       `
       INSERT INTO contracts (
         contract_no, title_deed_no, annual_rent,
-        total_contract_value, tenancy_start, tenancy_end, office_id, created_by
+        total_contract_value, tenancy_start, tenancy_end,
+        office_id, created_by
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING id
@@ -279,37 +291,35 @@ router.post("/full", verifyToken, async (req, res) => {
         c.title_deed_no || null,
         c.annual_rent || null,
         c.total_contract_value || null,
-        c.tenancy_start || null,
-        c.tenancy_end || null,
+        c.tenancy_start,
+        c.tenancy_end,
         officeId,
         userId,
       ]
     );
+
     const contractId = contractRes.rows[0].id;
 
-    // =============================================
-    // 4️⃣ إنشاء أو ربط العقار
-    // =============================================
+    /* =========================================================
+       4️⃣ إنشاء أو إحضار العقار (property)
+    ========================================================= */
     let propertyId = null;
+
     if (c.title_deed_no) {
       const existProp = await client.query(
-        "SELECT id FROM properties WHERE title_deed_no=$1 LIMIT 1",
-        [c.title_deed_no]
+        "SELECT id FROM properties WHERE title_deed_no=$1 AND office_id=$2 LIMIT 1",
+        [c.title_deed_no, officeId]
       );
 
-      if (existProp.rows.length > 0) {
+      if (existProp.rowCount > 0) {
         propertyId = existProp.rows[0].id;
-        await client.query(
-          "UPDATE properties SET contract_id=$1 WHERE id=$2",
-          [contractId, propertyId]
-        );
       } else {
         const p = c.property || {};
-        const propRes = await client.query(
+        const inserted = await client.query(
           `
           INSERT INTO properties (
             title_deed_no, property_type, property_usage,
-            num_units, national_address, property_name, contract_id
+            num_units, national_address, city,office_id
           ) VALUES ($1,$2,$3,$4,$5,$6,$7)
           RETURNING id
           `,
@@ -319,41 +329,61 @@ router.post("/full", verifyToken, async (req, res) => {
             p.property_usage || null,
             p.num_units || (c.units?.length || 1),
             p.national_address || null,
-            p.property_name || null,
-            contractId,
+            p.city || null,
+            officeId,
           ]
         );
-        propertyId = propRes.rows[0].id;
+        propertyId = inserted.rows[0].id;
       }
-
-      await client.query(
-        "UPDATE contracts SET property_id=$1 WHERE id=$2",
-        [propertyId, contractId]
-      );
+    } else {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "❌ لا يمكن إنشاء عقد بدون رقم صك (title_deed_no).",
+      });
     }
 
-    // =============================================
-    // 5️⃣ إنشاء أو ربط الأطراف (مستأجر / مالك)
-    // =============================================
-    const createOrGetParty = async (party, type) => {
-      if (!party?.name) return null;
-      const exist = await client.query(
-        "SELECT id FROM parties WHERE phone=$1 OR national_id=$2 LIMIT 1",
-        [party.phone || null, party.id || null]
-      );
-      if (exist.rows.length > 0) return exist.rows[0].id;
+    await client.query(
+      "UPDATE contracts SET property_id=$1 WHERE id=$2",
+      [propertyId, contractId]
+    );
 
-      const ins = await client.query(
-        "INSERT INTO parties (type, name, phone, national_id) VALUES ($1,$2,$3,$4) RETURNING id",
-        [type, party.name, party.phone || null, party.id || null]
+    /* =========================================================
+       5️⃣ الأطراف (مستأجر / مالك)
+    ========================================================= */
+    const createOrGetParty = async (party, role) => {
+      if (!party?.name) return null;
+
+      const existing = await client.query(
+        `
+        SELECT id FROM parties
+        WHERE phone=$1 OR national_id=$2
+        LIMIT 1
+        `,
+        [party.phone, party.id]
       );
-      return ins.rows[0].id;
+
+      if (existing.rowCount > 0) return existing.rows[0].id;
+
+      const inserted = await client.query(
+        `
+        INSERT INTO parties (type, name, phone, national_id)
+        VALUES ($1,$2,$3,$4)
+        RETURNING id
+        `,
+        [role, party.name, party.phone, party.id]
+      );
+
+      return inserted.rows[0].id;
     };
 
-    const tenantIds = [];
-    for (const t of c.tenants || []) tenantIds.push(await createOrGetParty(t, "tenant"));
-    const lessorIds = [];
-    for (const l of c.lessors || []) lessorIds.push(await createOrGetParty(l, "lessor"));
+    const tenantIds = await Promise.all(
+      (c.tenants || []).map((t) => createOrGetParty(t, "tenant"))
+    );
+
+    const lessorIds = await Promise.all(
+      (c.lessors || []).map((l) => createOrGetParty(l, "lessor"))
+    );
 
     for (const tid of tenantIds)
       if (tid)
@@ -369,176 +399,197 @@ router.post("/full", verifyToken, async (req, res) => {
           [contractId, lid]
         );
 
-    // =============================================
-    // 6️⃣ إنشاء المستخدمين للأطراف تلقائيًا
-    // =============================================
-    const linkUserRole = async (party, roleName) => {
+    /* =========================================================
+       6️⃣ إنشاء المستخدمين للأطراف (تلقائي)
+    ========================================================= */
+    const linkUserRole = async (party, role) => {
       if (!party?.phone) return;
-      const userRes = await client.query("SELECT id FROM users WHERE phone=$1", [party.phone]);
-      let userId;
-      if (userRes.rows.length === 0) {
-        const ins = await client.query(
+
+      const existing = await client.query(
+        "SELECT id FROM users WHERE phone=$1 LIMIT 1",
+        [party.phone]
+      );
+
+      let pid;
+
+      if (existing.rowCount === 0) {
+        const newUser = await client.query(
           "INSERT INTO users (name, phone) VALUES ($1,$2) RETURNING id",
           [party.name, party.phone]
         );
-        userId = ins.rows[0].id;
+        pid = newUser.rows[0].id;
       } else {
-        userId = userRes.rows[0].id;
+        pid = existing.rows[0].id;
       }
 
-      const roleRes = await client.query("SELECT id FROM roles WHERE role_name=$1", [roleName]);
-      const roleId = roleRes.rows[0].id;
-      const check = await client.query(
-        "SELECT id FROM user_roles WHERE user_id=$1 AND role_id=$2",
-        [userId, roleId]
+      const roleRec = await client.query(
+        "SELECT id FROM roles WHERE role_name=$1",
+        [role]
       );
-      if (check.rows.length === 0)
-        await client.query("INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2)", [
-          userId,
-          roleId,
-        ]);
+
+      const roleId = roleRec.rows[0].id;
+
+      const existsUserRole = await client.query(
+        "SELECT id FROM user_roles WHERE user_id=$1 AND role_id=$2",
+        [pid, roleId]
+      );
+
+      if (existsUserRole.rowCount === 0)
+        await client.query(
+          "INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2)",
+          [pid, roleId]
+        );
     };
 
     for (const t of c.tenants || []) await linkUserRole(t, "tenant");
     for (const l of c.lessors || []) await linkUserRole(l, "owner");
 
-    // =============================================
-    // 7️⃣ الوسيط العقاري
-    // =============================================
-    let brokerId = null;
+    /* =========================================================
+       7️⃣ الوسيط العقاري
+    ========================================================= */
     if (c.brokerage_entity?.cr_no) {
+      const b = c.brokerage_entity;
+
       const existing = await client.query(
         "SELECT id FROM brokerage_entities WHERE cr_no=$1 LIMIT 1",
-        [c.brokerage_entity.cr_no]
+        [b.cr_no]
       );
-      if (existing.rows.length > 0) {
+
+      let brokerId;
+
+      if (existing.rowCount > 0) {
         brokerId = existing.rows[0].id;
       } else {
-        const b = c.brokerage_entity;
-        const ins = await client.query(
+        const inserted = await client.query(
           `
           INSERT INTO brokerage_entities (name, cr_no, address, landline, contract_id)
           VALUES ($1,$2,$3,$4,$5)
           RETURNING id
           `,
-          [b.name, b.cr_no, b.address || null, b.phone || b.landline || null, contractId]
+          [b.name, b.cr_no, b.address, b.phone || b.landline, contractId]
         );
-        brokerId = ins.rows[0].id;
+
+        brokerId = inserted.rows[0].id;
       }
-      await client.query("UPDATE contracts SET broker_id=$1 WHERE id=$2", [brokerId, contractId]);
+
+      await client.query(
+        "UPDATE contracts SET broker_id=$1 WHERE id=$2",
+        [brokerId, contractId]
+      );
     }
 
-    // =============================================
-    // 8️⃣ الوحدات (تحقق أدق من ارتباط المكتب)
-    // =============================================
-    if (Array.isArray(c.units)) {
-    for (const u of c.units) {
-      if (!u.unit_no) continue;
+    /* =========================================================
+       8️⃣ الوحدات — الربط الاحترافي عبر contract_units
+    ========================================================= */
+    async function findOrCreateUnit(unit) {
+      const unitNo = unit.unit_no;
 
-      // 🔍 التحقق من وجود وحدة نشطة فعليًا داخل نفس المكتب
-      const existUnit = await client.query(
-        `
-        SELECT 
-          u.id,
-          u.contract_id,
-          c.tenancy_end,
-          c.office_id AS contract_office_id,
-          p.office_id AS property_office_id
-        FROM units u
-        LEFT JOIN contracts c ON c.id = u.contract_id
-        LEFT JOIN properties p ON p.id = u.property_id
-        WHERE u.property_id = $1
-          AND u.unit_no = $2
-        ORDER BY u.id DESC
-        LIMIT 1
-        `,
-        [propertyId, u.unit_no]
-      );
-
-      if (existUnit.rows.length > 0) {
-        const { tenancy_end, contract_office_id, property_office_id } = existUnit.rows[0];
-        const isActive = !tenancy_end || new Date(tenancy_end) >= new Date();
-
-        // ⚠️ يمنع فقط إذا الوحدة نشطة ومربوطة بنفس المكتب فعليًا
-        if (
-          isActive &&
-          (
-            (contract_office_id !== null && contract_office_id === officeId) ||
-            (property_office_id !== null && property_office_id === officeId)
-          )
-        ) {
-          await client.query("ROLLBACK");
-          return res.status(400).json({
-            success: false,
-            message: `❌ الوحدة رقم (${u.unit_no}) مرتبطة بعقد نشط داخل نفس المكتب.`,
-          });
-        }
+      if (!/^\d+$/.test(unitNo)) {
+        throw new Error(`رقم الوحدة (${unitNo}) يجب أن يكون أرقام فقط`);
       }
 
-      // 🏗️ إنشاء الوحدة
-      await client.query(
+      const existing = await client.query(
+        "SELECT id FROM units WHERE property_id=$1 AND unit_no=$2 LIMIT 1",
+        [propertyId, unitNo]
+      );
+
+      if (existing.rowCount > 0) return existing.rows[0].id;
+
+      const inserted = await client.query(
         `
         INSERT INTO units (
-          property_id,
-          contract_id,
-          unit_no,
-          unit_type,
-          unit_area,
-          electric_meter_no,
-          water_meter_no
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+          property_id, unit_no, unit_type, unit_area,
+          electric_meter_no, water_meter_no
+        ) VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING id
         `,
         [
           propertyId,
-          contractId,
-          u.unit_no || null,
-          u.unit_type || null,
-          u.unit_area || null,
-          u.electric_meter_no || null,
-          u.water_meter_no || null,
+          unitNo,
+          unit.unit_type || null,
+          unit.unit_area || null,
+          unit.electric_meter_no || null,
+          unit.water_meter_no || null,
         ]
       );
+
+      return inserted.rows[0].id;
     }
+
+    if (Array.isArray(c.units)) {
+      for (const u of c.units) {
+        const unitId = await findOrCreateUnit(u);
+
+        const conflict = await client.query(
+          `
+          SELECT 1
+          FROM contract_units cu
+          WHERE cu.unit_id = $1
+            AND daterange(cu.start_date, cu.end_date) 
+                && daterange($2, $3)
+          `,
+          [unitId, c.tenancy_start, c.tenancy_end]
+        );
+
+        if (conflict.rowCount > 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            success: false,
+            message: `❌ لا يمكن ربط الوحدة (${u.unit_no}) لأنها مربوطة بعقد آخر في نفس الفترة.`,
+          });
+        }
+
+        await client.query(
+          `
+          INSERT INTO contract_units (contract_id, unit_id, start_date, end_date)
+          VALUES ($1,$2,$3,$4)
+          `,
+          [contractId, unitId, c.tenancy_start, c.tenancy_end]
+        );
+      }
     }
 
-
-
-
-    // =============================================
-    // 9️⃣ الدفعات
-    // =============================================
+    /* =========================================================
+       9️⃣ الدفعات
+    ========================================================= */
     for (const p of c.payments || []) {
       await client.query(
-        "INSERT INTO payments (contract_id, due_date, amount, status) VALUES ($1,$2,$3,$4)",
+        `
+        INSERT INTO payments (contract_id, due_date, amount, status)
+        VALUES ($1,$2,$3,$4)
+        `,
         [contractId, p.due_date, p.amount, p.status || "غير مدفوعة"]
       );
     }
 
-    // =============================================
-    // 🔟 حفظ في الأوديت
-    // =============================================
+    /* =========================================================
+       🔟 الأوديت
+    ========================================================= */
     await logAudit(pool, {
       user_id: userId,
       action: "INSERT",
       table_name: "contracts",
       record_id: contractId,
       new_data: c,
-      description: `إنشاء عقد جديد بواسطة ${activeRole} (OfficeID: ${officeId || "N/A"})`,
+      description: `إنشاء عقد جديد بواسطة ${activeRole}`,
       endpoint: "/contracts/full",
     });
 
-    // =============================================
-    // ✅ إنهاء العملية
-    // =============================================
     await client.query("COMMIT");
+
     res.json({
       success: true,
-      message: "✅ تم إنشاء العقد والمستخدمين وربط المكتب بنجاح",
-      data: { contract_id: contractId, property_id: propertyId, office_id: officeId },
+      message: "✅ تم إنشاء العقد وربط الوحدات بنجاح",
+      data: {
+        contract_id: contractId,
+        property_id: propertyId,
+        office_id: officeId,
+      },
     });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error saving contract:", err);
+
     res.status(500).json({
       success: false,
       message: "حدث خطأ أثناء حفظ العقد",
@@ -549,12 +600,15 @@ router.post("/full", verifyToken, async (req, res) => {
   }
 });
 
+
+
 // =========================================================
 // ✏️ تحديث بيانات العقد الأساسي (Contract)
 // =========================================================
+
 router.put("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
-  let {
+  const {
     contract_no,
     start_date,
     end_date,
@@ -562,68 +616,154 @@ router.put("/:id", verifyToken, async (req, res) => {
     total_contract_value
   } = req.body;
 
-  try {
-    // 🧠 تنظيف القيم الفارغة
-    start_date = start_date || null;
-    end_date = end_date || null;
-    contract_no = contract_no || null;
-    annual_rent = annual_rent || null;
-    total_contract_value = total_contract_value || null;
+  const client = await pool.connect();
 
-    // ✅ تحقق من وجود العقد
-    const { rowCount } = await pool.query("SELECT id FROM contracts WHERE id=$1", [id]);
-    if (rowCount === 0) {
+  try {
+    await client.query("BEGIN");
+
+    /* =========================================================
+       1️⃣ تحقق أن العقد موجود
+    ========================================================= */
+    const contractRes = await client.query(
+      "SELECT * FROM contracts WHERE id = $1",
+      [id]
+    );
+
+    if (contractRes.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: "❌ العقد غير موجود",
       });
     }
 
-    // 🧾 تحديث بيانات العقد الأساسية
-    const result = await pool.query(
+    const oldContract = contractRes.rows[0];
+
+    /* =========================================================
+       2️⃣ فاليديشن التواريخ
+    ========================================================= */
+    if (start_date && end_date) {
+      if (new Date(start_date) >= new Date(end_date)) {
+        return res.status(400).json({
+          success: false,
+          message: "❌ تاريخ النهاية يجب أن يكون بعد تاريخ البداية",
+        });
+      }
+    }
+
+    /* =========================================================
+       3️⃣ تحديث العقد
+    ========================================================= */
+    const updated = await client.query(
       `
       UPDATE contracts
       SET
         contract_no = COALESCE($1, contract_no),
-        tenancy_start = COALESCE(TO_DATE($2, 'YYYY-MM-DD'), tenancy_start),
-        tenancy_end = COALESCE(TO_DATE($3, 'YYYY-MM-DD'), tenancy_end),
+        tenancy_start = COALESCE($2, tenancy_start),
+        tenancy_end = COALESCE($3, tenancy_end),
         annual_rent = COALESCE($4, annual_rent),
         total_contract_value = COALESCE($5, total_contract_value, $4),
         updated_at = NOW()
       WHERE id = $6
-      RETURNING 
-        id, 
-        contract_no, 
-        tenancy_start, 
-        tenancy_end, 
-        annual_rent, 
-        total_contract_value, 
-        updated_at
+      RETURNING *
       `,
-      [contract_no, start_date, end_date, annual_rent, total_contract_value, id]
+      [
+        contract_no || null,
+        start_date || null,
+        end_date || null,
+        annual_rent || null,
+        total_contract_value || null,
+        id,
+      ]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "❌ Contract not found",
-      });
+    const newContract = updated.rows[0];
+
+    /* =========================================================
+       4️⃣ تعديل فترات الوحدات المرتبطة بالعقد
+    ========================================================= */
+    const contractUnits = await client.query(
+      "SELECT cu.*, u.unit_no FROM contract_units cu JOIN units u ON u.id = cu.unit_id WHERE cu.contract_id = $1",
+      [id]
+    );
+
+    for (const cu of contractUnits.rows) {
+      // ⚠️ تحقق من التداخل مع العقود الأخرى
+      const conflict = await client.query(
+        `
+        SELECT 1
+        FROM contract_units cu2
+        WHERE cu2.unit_id = $1
+          AND cu2.contract_id <> $2
+          AND daterange(cu2.start_date, cu2.end_date, '[)') && daterange($3, $4, '[)')
+        LIMIT 1
+        `,
+        [cu.unit_id, id, newContract.tenancy_start, newContract.tenancy_end]
+      );
+
+      if (conflict.rowCount > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: ` لا يمكن تعديل العقد. توجد فترة متداخلة مع وحدة رقم ${cu.unit_no}`,
+        });
+      }
+
+      // ✔ تحديث الفترة بعد التأكد من عدم وجود تضارب
+      await client.query(
+        `
+        UPDATE contract_units
+        SET start_date = $1,
+            end_date = $2
+        WHERE id = $3
+        `,
+        [
+          newContract.tenancy_start,
+          newContract.tenancy_end,
+          cu.id
+        ]
+      );
     }
+
+    /* =========================================================
+       5️⃣ تسجيل في الأوديت
+    ========================================================= */
+    await logAudit(pool, {
+      user_id: req.user.id,
+      action: "UPDATE",
+      table_name: "contracts",
+      record_id: id,
+      old_data: oldContract,
+      new_data: newContract,
+      description: `تعديل بيانات عقد (${id})`,
+      endpoint: `/contracts/${id}`,
+    });
+
+    /* =========================================================
+       6️⃣ COMMIT & RETURN
+    ========================================================= */
+    await client.query("COMMIT");
 
     res.json({
       success: true,
       message: "✅ تم تحديث بيانات العقد بنجاح",
-      data: result.rows[0],
+      data: newContract,
     });
+
   } catch (err) {
+    await client.query("ROLLBACK");
+
     console.error("❌ Error updating contract:", err);
     res.status(500).json({
       success: false,
-      message: "حدث خطأ أثناء تحديث بيانات العقد",
+      message: "حدث خطأ أثناء تحديث العقد",
       details: err.message,
     });
+  } finally {
+    client.release();
   }
 });
+
+
 
 
 
@@ -659,8 +799,9 @@ router.put("/:id/property", verifyToken, async (req, res) => {
         national_address = COALESCE($3, national_address),
         title_deed_no = COALESCE($4, title_deed_no),
         num_units = COALESCE($5, num_units),
+        city = COALESCE($6, city),
         updated_at = NOW()
-      WHERE id = $6
+      WHERE id = $7
       `,
       [
         p.property_type || p.type || p.property_name,
@@ -668,6 +809,7 @@ router.put("/:id/property", verifyToken, async (req, res) => {
         p.national_address,
         p.title_deed_no,
         p.num_units,
+        p.city,
         propertyId,
       ]
     );
@@ -771,37 +913,138 @@ router.put("/:id/lessors", verifyToken, async (req, res) => {
    🏘️ تحديث بيانات الوحدات (Units)
    ========================================================= */
 router.put("/:id/units", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const units = req.body || [];
+  const { id: contractId } = req.params;
+  const { units } = req.body;
   const client = await pool.connect();
 
   try {
+    if (!Array.isArray(units)) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ يجب إرسال مصفوفة الوحدات units[]",
+      });
+    }
+
     await client.query("BEGIN");
 
-    // 🧹 حذف الوحدات القديمة
-    await client.query("DELETE FROM units WHERE contract_id=$1", [id]);
+    // 1️⃣ احضار معلومات العقد
+    const contractRes = await client.query(
+      `SELECT tenancy_start, tenancy_end, property_id 
+       FROM contracts WHERE id = $1`,
+      [contractId]
+    );
 
-    // 🔁 إدخال الوحدات الجديدة
+    if (contractRes.rowCount === 0) {
+      throw new Error("العقد غير موجود");
+    }
+
+    const { tenancy_start, tenancy_end, property_id } = contractRes.rows[0];
+
+    // 2️⃣ احضار الروابط الحالية
+    const existing = await client.query(
+      `SELECT unit_id FROM contract_units WHERE contract_id = $1`,
+      [contractId]
+    );
+
+    const existingIds = existing.rows.map(r => r.unit_id);
+
+    const requestedIds = [];
+
     for (const u of units) {
-      await client.query(
-        `
-        INSERT INTO units (contract_id, unit_no, unit_type, unit_area, electric_meter_no, water_meter_no)
-        VALUES ($1, $2, $3, $4, $5, $6)
+      let unitId = u.unit_id;
+
+      if (unitId) {
+        // ✨ تحديث بيانات الوحدة لأنها قديمة
+        await client.query(
+          `
+          UPDATE units
+          SET 
+            unit_no = $1,
+            unit_type = $2,
+            unit_area = $3,
+            electric_meter_no = $4,
+            water_meter_no = $5,
+            updated_at = NOW()
+          WHERE id = $6
         `,
-        [id, u.unit_no, u.unit_type, u.unit_area, u.electric_meter_no, u.water_meter_no]
-      );
+          [
+            u.unit_no,
+            u.unit_type,
+            u.unit_area,
+            u.electric_meter_no,
+            u.water_meter_no,
+            unitId,
+          ]
+        );
+      } else {
+        // ✨ إضافة وحدة جديدة
+        const insert = await client.query(
+          `
+          INSERT INTO units (
+            property_id, unit_no, unit_type, unit_area,
+            electric_meter_no, water_meter_no
+          ) VALUES ($1,$2,$3,$4,$5,$6)
+          RETURNING id
+        `,
+          [
+            property_id,
+            u.unit_no,
+            u.unit_type,
+            u.unit_area,
+            u.electric_meter_no,
+            u.water_meter_no,
+          ]
+        );
+
+        unitId = insert.rows[0].id;
+      }
+
+      requestedIds.push(unitId);
+
+      // 🔗 إذا الرابط غير موجود → ضيفه
+      if (!existingIds.includes(unitId)) {
+        await client.query(
+          `
+          INSERT INTO contract_units (contract_id, unit_id, start_date, end_date)
+          VALUES ($1,$2,$3,$4)
+        `,
+          [contractId, unitId, tenancy_start, tenancy_end]
+        );
+      }
+    }
+
+    // 3️⃣ حذف أي روابط لم تعد موجودة
+    for (const old of existingIds) {
+      if (!requestedIds.includes(old)) {
+        await client.query(
+          `DELETE FROM contract_units WHERE contract_id=$1 AND unit_id=$2`,
+          [contractId, old]
+        );
+      }
     }
 
     await client.query("COMMIT");
-    res.json({ success: true, message: "✅ تم تحديث بيانات الوحدات بنجاح" });
+
+    res.json({
+      success: true,
+      message: "✅ تم تحديث بيانات الوحدات وربطها بالعقد بنجاح",
+    });
+
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error updating units:", err);
-    res.status(500).json({ success: false, message: err.message });
+
+    res.status(500).json({
+      success: false,
+      message: "حدث خطأ أثناء تحديث وحدات العقد",
+      details: err.message,
+    });
   } finally {
     client.release();
   }
 });
+
+
 
 /* =========================================================
    💰 تحديث الدفعات (Payments) + موازنة مالية ذكية
@@ -1106,69 +1349,67 @@ async function reconcilePaymentsSmartV3(client, contractId) {
 /* =========================================================
    🧩 عرض تفاصيل العقد حسب الدور (يدعم المكاتب + تعدد الأدوار)
    ========================================================= */
+/* =========================================================
+   📄 عرض تفاصيل عقد — يدعم جميع الصلاحيات
+   ========================================================= */
 router.get("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const { id: userId, phone, roles = [], activeRole } = req.user;
+  const { id: userId, phone, activeRole } = req.user;
   const client = await pool.connect();
 
   try {
     const isNumeric = !isNaN(id);
-    let contractFilter = "";
+    let filter = "";
     let params = [];
 
-    // ================================
-    // 🔐 فلترة العقود حسب الدور الحالي
-    // ================================
+    /* =========================================================
+       🛡️ 1️⃣ فلترة صلاحيات الوصول
+    ========================================================= */
     if (activeRole === "admin") {
-      // ✅ الأدمن يشوف جميع العقود
-      contractFilter = `${isNumeric ? "c.id = $1" : "c.contract_no = $1"}`;
+      filter = isNumeric ? "c.id = $1" : "c.contract_no = $1";
       params = [id];
     }
 
-    // ✅ المكاتب (مالك المكتب أو موظف فيه)
+    // مكتب أو موظف مكتب
     else if (["office", "office_admin"].includes(activeRole)) {
-      
-
-      contractFilter = `
+      filter = `
         ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
-        AND (
-          c.office_id IN (
-            SELECT id FROM offices WHERE owner_id = $2
-            UNION
-            SELECT office_id FROM office_users WHERE user_id = $2
-          )
+        AND c.office_id IN (
+          SELECT office_id FROM office_users WHERE user_id = $2
+          UNION
+          SELECT id FROM offices WHERE owner_id = $2
         )
       `;
       params = [id, userId];
     }
 
-    // ✅ المالك (lessor)
+    // مالك العقار
     else if (["owner", "مالك"].includes(activeRole)) {
-      contractFilter = `
+      filter = `
         ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
         AND c.id IN (
           SELECT cp.contract_id
           FROM contract_parties cp
           JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-            AND REPLACE(REPLACE(REPLACE(p.phone, '+966', '0'), ' ', ''), '-', '') 
-                = REPLACE(REPLACE(REPLACE($2, '+966', '0'), ' ', ''), '-', '')
+          WHERE LOWER(TRIM(cp.role)) IN ('lessor', 'مالك')
+            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') = 
+                REPLACE(REPLACE(REPLACE($2,'+966','0'),' ','') ,'-','')
         )
       `;
       params = [id, phone];
     }
 
-    // ✅ المستأجر (tenant)
+    // مستأجر
     else if (["tenant", "مستأجر"].includes(activeRole)) {
-      contractFilter = `
+      filter = `
         ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
         AND c.id IN (
           SELECT cp.contract_id
           FROM contract_parties cp
           JOIN parties p ON p.id = cp.party_id
           WHERE LOWER(TRIM(cp.role)) IN ('tenant','مستأجر','مستاجر')
-            AND REPLACE(REPLACE(REPLACE(p.phone, '+966', '0'), ' ', ''), '-', '') 
-                = REPLACE(REPLACE(REPLACE($2, '+966', '0'), ' ', ''), '-', '')
+            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') = 
+                REPLACE(REPLACE(REPLACE($2,'+966','0'),' ','') ,'-','')
         )
       `;
       params = [id, phone];
@@ -1177,145 +1418,194 @@ router.get("/:id", verifyToken, async (req, res) => {
     else {
       return res.status(403).json({
         success: false,
-        message_ar: "❌ لا تملك صلاحية للوصول إلى تفاصيل العقد.",
-        message_en: "Unauthorized to access this contract.",
+        message: "🚫 لا تملك صلاحية للوصول لهذا العقد",
       });
     }
 
-
-    // ================================
-    // 1️⃣ جلب بيانات العقد (بدون تقييد بالنهاية)
-    // ================================
-    const { rows } = await client.query(
+    /* =========================================================
+       🧾 2️⃣ جلب بيانات العقد الأساسية
+    ========================================================= */
+    const baseRes = await client.query(
       `
       SELECT 
         c.*,
-        p.property_type, p.property_usage, p.num_units, p.national_address, 
-        p.title_deed_no AS property_title_deed_no,
-        b.name AS brokerage_name, b.cr_no AS brokerage_cr_no, 
-        b.landline AS brokerage_phone, b.address AS brokerage_address,
-        o.name AS office_name, o.id AS office_id
+        o.name AS office_name,
+        o.id AS office_id,
+        p.property_type AS property_name,
+        p.property_usage AS usage,
+        p.num_units,
+        p.national_address,
+        p.city,
+        p.title_deed_no
       FROM contracts c
-      LEFT JOIN properties p ON p.id = c.property_id
-      LEFT JOIN brokerage_entities b ON b.id = c.broker_id
       LEFT JOIN offices o ON o.id = c.office_id
-      WHERE ${contractFilter}
+      LEFT JOIN properties p ON p.id = c.property_id
+      WHERE ${filter}
       `,
       params
     );
 
-    if (rows.length === 0) {
-    
+    if (baseRes.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message_ar: "❌ لم يتم العثور على العقد أو لا تملك صلاحية عرضه.",
-        message_en: "❌ Contract not found or access denied.",
-        
+        message: "❌ العقد غير موجود أو لا تملك صلاحية عرضه",
       });
-      
     }
 
-    const base = rows[0];
+    const contract = baseRes.rows[0];
 
-    // ================================
-    // 2️⃣ تحميل القوائم المرتبطة (Parallel)
-    // ================================
-    const [tenants, lessors, payments, units, expenses, receipts] = await Promise.all([
+    /* =========================================================
+       🔗 3️⃣ تحميل العلاقات المرتبطة (بشكل متوازي)
+    ========================================================= */
+    const [
+      tenants,
+      lessors,
+      payments,
+      units,
+      expenses,
+      receipts
+    ] = await Promise.all([
+
+      // مستأجرين
       client.query(
-        `SELECT name, national_id AS id, phone FROM parties pt
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = $1 AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر','مستاجر')`,
-        [base.id]
+        `
+        SELECT pt.name, pt.national_id AS id, pt.phone
+        FROM parties pt
+        JOIN contract_parties cp ON cp.party_id = pt.id
+        WHERE cp.contract_id = $1 AND cp.role IN ('tenant','مستأجر','مستاجر')
+        `,
+        [contract.id]
       ),
+
+      // ملاك
       client.query(
-        `SELECT name, national_id AS id, phone FROM parties pt
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = $1 AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')`,
-        [base.id]
+        `
+        SELECT pt.name, pt.national_id AS id, pt.phone
+        FROM parties pt
+        JOIN contract_parties cp ON cp.party_id = pt.id
+        WHERE cp.contract_id = $1 AND cp.role IN ('lessor','مالك')
+        `,
+        [contract.id]
       ),
+
+      // دفعات
       client.query(
-        `SELECT id, due_date, amount, COALESCE(paid_amount, 0) AS paid_amount,
-                (amount - COALESCE(paid_amount, 0)) AS remaining_amount,
-                status, notes FROM payments WHERE contract_id = $1 ORDER BY due_date ASC`,
-        [base.id]
+        `
+        SELECT id, due_date, amount, COALESCE(paid_amount,0) AS paid_amount,
+               (amount - COALESCE(paid_amount,0)) AS remaining_amount,
+               status, notes
+        FROM payments
+        WHERE contract_id = $1
+        ORDER BY due_date ASC
+        `,
+        [contract.id]
       ),
+
+      // الوحدات من contract_units
       client.query(
-        `SELECT id, unit_no, unit_type, unit_area,electric_meter_no,water_meter_no FROM units WHERE contract_id = $1 ORDER BY unit_no`,
-        [base.id]
+        `
+        SELECT 
+          u.id,
+          cu.unit_id,
+          u.unit_no,
+          u.unit_type,
+          u.unit_area,
+          u.electric_meter_no,
+          u.water_meter_no
+        FROM contract_units cu
+        JOIN units u ON u.id = cu.unit_id
+        WHERE cu.contract_id = $1
+        ORDER BY u.unit_no
+
+
+        `,
+        [contract.id]
       ),
+
+      // مصروفات
       client.query(
-        `SELECT id, expense_type, amount,paid_by,on_whom, date FROM expenses WHERE contract_id = $1 ORDER BY date DESC`,
-        [base.id]
+        `
+        SELECT id, expense_type, amount, paid_by, on_whom, notes, date 
+        FROM expenses
+        WHERE contract_id = $1
+        ORDER BY date DESC
+        `,
+        [contract.id]
       ),
+
+      // سندات قبض/صرف
       client.query(
-        `SELECT reference_no, receipt_type,payer,receiver, amount, date FROM receipts WHERE contract_id = $1 ORDER BY date DESC`,
-        [base.id]
+        `
+        SELECT id, reference_no, receipt_type, payer, receiver, amount, date
+        FROM receipts
+        WHERE contract_id = $1
+        ORDER BY date DESC
+        `,
+        [contract.id]
       ),
     ]);
 
-    // ================================
-    // 3️⃣ تجهيز الكائن النهائي
-    // ================================
-    const contract = {
-      id: base.id,
-      contract_no: base.contract_no,
-      office_id: base.office_id,
-      office_name: base.office_name,
-      start_date: base.tenancy_start,
-      end_date: base.tenancy_end,
-      annual_rent: Number(base.annual_rent || 0),
-      total_contract_value: Number(base.total_contract_value || 0),
+    /* =========================================================
+       🧱 4️⃣ بناء جسم العقد النهائي
+    ========================================================= */
+    const final = {
+      id: contract.id,
+      contract_no: contract.contract_no,
+      office_id: contract.office_id,
+      office_name: contract.office_name,
+
+      tenancy_start: contract.tenancy_start,
+      tenancy_end: contract.tenancy_end,
+
+      annual_rent: Number(contract.annual_rent || 0),
+      total_contract_value: Number(contract.total_contract_value || 0),
+
       property: {
-        property_name: base.property_type,
-        usage: base.property_usage,
-        num_units: base.num_units,
-        national_address: base.national_address,
-        title_deed_no: base.property_title_deed_no || base.title_deed_no,
+        title_deed_no: contract.title_deed_no,
+        property_name: contract.property_name,
+        usage: contract.usage,
+        city: contract.city,
+        num_units: contract.num_units,
+        national_address: contract.national_address,
       },
-      brokerage_entity: {
-        name: base.brokerage_name,
-        cr_no: base.brokerage_cr_no,
-        phone: base.brokerage_phone,
-        address: base.brokerage_address,
-      },
+
       tenants: tenants.rows,
       lessors: lessors.rows,
-      payments: payments.rows,
       units: units.rows,
+      payments: payments.rows,
       expenses: expenses.rows,
       receipts: receipts.rows,
     };
 
-    // ================================
-    // 4️⃣ الأوديت
-    // ================================
+    /* =========================================================
+       📝 5️⃣ تسجيل في الـ Audit
+    ========================================================= */
     await logAudit(pool, {
       user_id: userId,
       action: "VIEW",
       table_name: "contracts",
       record_id: contract.id,
-      description: `عرض تفاصيل عقد (${contract.contract_no}) بواسطة ${activeRole}`,
+      description: `عرض تفاصيل عقد (${contract.contract_no})`,
       endpoint: `/contracts/${id}`,
     });
 
-    res.json({
+    return res.json({
       success: true,
-      message_ar: "✅ تم جلب تفاصيل العقد بنجاح.",
-      message_en: "✅ Contract details retrieved successfully.",
-      data: contract,
+      message: "تم جلب بيانات العقد",
+      data: final,
     });
   } catch (err) {
-    console.error("❌ Error fetching contract details:", err);
+    console.error("❌ Contract Details Error:", err);
     res.status(500).json({
       success: false,
-      message_ar: "حدث خطأ أثناء تحميل تفاصيل العقد.",
-      message_en: "An error occurred while fetching contract details.",
+      message: "خطأ أثناء جلب تفاصيل العقد",
       details: err.message,
     });
   } finally {
     client.release();
   }
 });
+
 
 
 

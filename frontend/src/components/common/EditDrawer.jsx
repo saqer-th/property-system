@@ -14,7 +14,7 @@ import { API_KEY,API_URL } from "@/config";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 
-export default function EditDrawer({ open, setOpen, section, contract, setContract }) {
+export default function EditDrawer({ open, setOpen, section, contract, setContract, property, refresh }) {
   const { t } = useTranslation();
   const { user } = useAuth(); // ✅ هنا نجيب المستخدم الحالي (من AuthContext)
   const [form, setForm] = useState({});
@@ -24,15 +24,15 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
 
   // 🔹 تحميل بيانات القسم عند فتح الـ Drawer
   useEffect(() => {
-    if (!section || !contract) return;
+    if (!section || (!contract && !property)) return;
 
     const initialData = (() => {
       switch (section) {
         case "contract":
           return {
             ["contract_no"]: contract.contract_no || "",
-            ["start_date"]: contract.start_date?.split("T")[0] || "",
-            ["end_date"]: contract.end_date?.split("T")[0] || "",
+            ["start_date"]: contract.tenancy_start?.split("T")[0] || "",
+            ["end_date"]: contract.tenancy_end?.split("T")[0] || "",
             ["annual_rent"]: contract.annual_rent || "",
           };
         case "tenants":
@@ -85,12 +85,15 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
         case "broker":
           return contract.brokerage_entity || {};
         case "property":
-          return contract.property || {
-            title_deed_no: contract.title_deed_no || "",
-            property_type: contract.property_type || "",
-            national_address: contract.national_address || "",
-            num_units: contract.num_units || "",
-            property_usage: contract.property_usage || ""
+          // use provided property prop first, otherwise contract.property, otherwise contract (when contract payload is actually a property)
+          const src = property || contract?.property || contract || {};
+          return {
+            title_deed_no: src.title_deed_no || "",
+            property_name: src.property_name || "",
+            usage: src.property_usage || src.usage || "",
+            national_address: src.national_address || "",
+            num_units: src.num_units || "",
+            city : src.city || "",
           };
         default:
           return {};
@@ -98,77 +101,212 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
     })();
 
     setForm(initialData);
-  }, [section, contract]);
+  }, [section, contract, property]);
 
   // 💾 حفظ التعديلات
   async function handleSave() {
-  if (!contract?.id) return toast.error("Contract not found");
-  setSaving(true);
-
-  try {
-    let endpoint = `${API_URL}/contracts/${contract.id}`;
-    let payload = form;
-
-    switch (section) {
-      case "property":
-        endpoint += "/property";
-        break;
-      case "tenants":
-      case "lessors":
-      case "units":
-      case "payments":
-      case "expenses":
-      case "receipts":
-        endpoint += `/${section}`;
-        payload = form.list || [];
-        break;
-      case "broker":
-        endpoint += "/broker";
-        break;
-      default:
-        break;
+    // If editing a property directly (from Properties page) allow missing contract
+    if (!(section === "property" && property?.id) && !contract?.id) {
+      return toast.error("Contract not found");
     }
 
-    const res = await fetch(endpoint, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": import.meta.env.VITE_API_KEY || API_KEY,
-        Authorization: `Bearer ${user?.token}`,
-        "x-active-role": user?.activeRole,
-      },
-      body: JSON.stringify(payload),
-    });
+    setSaving(true);
 
-    if (!res.ok) {
-      const errorMsg = await res.text();
-      throw new Error(errorMsg || "Failed to save");
-    }
-
-    const json = await res.json();
-    toast.success(json.message || t("dataSavedSuccessfully"));
-
-    // ✅ تحديث بيانات العقد بعد الحفظ
     try {
-      const refreshed = await fetch(`${API_URL}/contracts/${contract.id}`, {
-        headers: { "x-api-key": API_KEY, Authorization: `Bearer ${token}`, "x-active-role": activeRole },
-      }).then((r) => r.json());
+      // ✅ إضافات تحقق لقسم الوحدات
+      if (section === "units") {
+        const unitsList = form.list || [];
 
-      if (setContract && refreshed) {
-        setContract(refreshed.data || refreshed);
+        // 1️⃣ تحقق أن رقم الوحدة أرقام فقط
+        const invalidUnits = unitsList.filter(
+          (u) => !/^\d+$/.test((u.unit_no || "").toString().trim())
+        );
+        if (invalidUnits.length > 0) {
+          toast.error("❌ رقم الوحدة يجب أن يكون بالأرقام فقط.", { duration: 4000 });
+          setSaving(false);
+          return;
+        }
+
+        // 2️⃣ تحقق من وجود وحدات مكررة بنفس الرقم
+        const seen = new Set();
+        const duplicates = [];
+        unitsList.forEach((u) => {
+          const v = (u.unit_no || "").toString().trim();
+          if (!v) return;
+          if (seen.has(v) && !duplicates.includes(v)) duplicates.push(v);
+          seen.add(v);
+        });
+
+        if (duplicates.length > 0) {
+          toast.error(
+            `⚠️ يوجد أكثر من وحدة بنفس الرقم (${duplicates.join(", ")}). يرجى التحقق.`,
+            { duration: 5000 }
+          );
+          setSaving(false);
+          return;
+        }
       }
-    } catch (err) {
-      console.error("⚠️ Error refreshing contract:", err);
-    }
 
-    setOpen(false);
-  } catch (err) {
-    console.error("❌ Save error:", err);
-    toast.error(err.message || t("saveFailed"));
-  } finally {
-    setSaving(false);
+      // =========================
+      // 🔁 Special handling for units: create/update each unit individually
+      // =========================
+      // =========================
+      // 🔁 Special handling for units — send ALL units once
+      // =========================
+      if (section === "units") {
+        const unitsList = form.list || [];
+
+        try {
+          const payloadUnits = unitsList.map((u) => ({
+            unit_id: u.unit_id || null,  // القديمة
+            unit_no: u.unit_no,
+            unit_type: u.unit_type,
+            unit_area: u.unit_area,
+            electric_meter_no: u.electric_meter_no,
+            water_meter_no: u.water_meter_no,
+          }));
+
+          const res = await fetch(`${API_URL}/contracts/${contract.id}/units`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": API_KEY,
+              Authorization: `Bearer ${user?.token}`,
+              "x-active-role": user?.activeRole,
+            },
+            body: JSON.stringify({ units: payloadUnits }),
+          });
+
+          const txt = await res.text();
+          const json = txt && txt.startsWith("{") ? JSON.parse(txt) : null;
+
+          if (!res.ok) {
+            throw new Error(json?.message || txt || "فشل حفظ الوحدات");
+          }
+
+          toast.success("تم حفظ وحدات العقد بنجاح");
+          setOpen(false);
+
+          // refresh
+          if (contract?.id && setContract) {
+            const refreshed = await fetch(`${API_URL}/contracts/${contract.id}`, {
+              headers: {
+                "x-api-key": API_KEY,
+                Authorization: `Bearer ${token}`,
+                "x-active-role": activeRole,
+              },
+            }).then((r) => r.json());
+
+            setContract(refreshed.data || refreshed);
+          }
+
+          return;
+        } catch (err) {
+          console.error("❌ Error saving units:", err);
+          toast.error(err.message || "فشل حفظ الوحدات");
+          setSaving(false);
+          return;
+        }
+      }
+
+
+      // Build endpoint & payload (support property update via /properties/:id when editing a property)
+      let endpoint;
+      let payload = form;
+
+      if (section === "property" && property?.id) {
+        // Update property directly
+        endpoint = `${API_URL}/properties/${property.id}`;
+      } else {
+        // Work with contract endpoints
+        endpoint = `${API_URL}/contracts/${contract.id}`;
+        switch (section) {
+          case "property":
+            endpoint += "/property";
+            break;
+          case "tenants":
+          case "lessors":
+          case "units":
+            endpoint += `/${section}`;
+            payload = { units: form.list || [] };
+            break;
+          case "payments":
+          case "expenses":
+          case "receipts":
+            endpoint += `/${section}`;
+            payload = form.list || [];
+            break;
+          case "broker":
+            endpoint += "/broker";
+            break;
+          default:
+            break;
+        }
+      }
+
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers:
+         {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_API_KEY || API_KEY,
+          Authorization: `Bearer ${user?.token}`,
+          "x-active-role": user?.activeRole,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let message = "حدث خطأ أثناء حفظ البيانات.";
+
+        try {
+          const text = await res.text();
+
+          if (text && text.startsWith("{")) {
+            const data = JSON.parse(text);
+            message = data.message || message;
+          } else if (text) {
+            message = text;
+          }
+        } catch (err) {
+          console.warn("⚠️ Error parsing error response:", err);
+        }
+
+        toast.error(message, {
+          duration: 5000,
+          icon: "❌",
+        });
+        return;
+      }
+
+      const json = await res.json();
+      toast.success(json.message || t("dataSavedSuccessfully"), { duration: 4000 });
+
+      // Refresh source: if we edited a property directly call refresh(), otherwise refresh contract
+      try {
+        if (property?.id && typeof refresh === "function") {
+          await refresh();
+        } else if (contract?.id && setContract) {
+          const refreshed = await fetch(`${API_URL}/contracts/${contract.id}`, {
+            headers: { "x-api-key": API_KEY, Authorization: `Bearer ${token}`, "x-active-role": activeRole },
+          }).then((r) => r.json());
+
+          if (setContract && refreshed) {
+            setContract(refreshed.data || refreshed);
+          }
+        }
+      } catch (err) {
+        console.error("⚠️ Error refreshing after save:", err);
+      }
+
+      setOpen(false);
+    } catch (err) {
+      console.error("❌ Save error:", err);
+      toast.error(err.message || t("saveFailed"));
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
 
   // 🔁 التعامل مع الحقول
@@ -476,6 +614,9 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
                           value={item[key]}
                           onChange={(v) => handleListChange(i, key, v)}
                           type={
+                            key === "unit_no"
+                              ? "number"
+                              :
                             key.includes("date")
                               ? "date"
                               : key.includes("amount") || key.includes("area")

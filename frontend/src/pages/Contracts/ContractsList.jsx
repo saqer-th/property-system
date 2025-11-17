@@ -30,15 +30,21 @@ export default function ContractsList() {
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // New Filter States
   const [selectedProperty, setSelectedProperty] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedOffice, setSelectedOffice] = useState("");
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState("");
   const [showDueSoon, setShowDueSoon] = useState(false);
   const [showAdvanceOnly, setShowAdvanceOnly] = useState(false);
 
   const activeRole = user?.activeRole;
   const canAdd = ["admin", "office_admin", "office"].includes(activeRole);
 
-  // 📦 تحميل العقود
+  // 📦 Load contracts
   useEffect(() => {
     async function fetchContracts() {
       if (!user?.token) return;
@@ -52,10 +58,9 @@ export default function ContractsList() {
           },
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.message || "فشل تحميل العقود");
+        if (!data.success) throw new Error(data.message || "Error loading contracts");
 
-        const list = data.data || [];
-        const enriched = list.map((c) => ({
+        const enriched = (data.data || []).map((c) => ({
           ...c,
           total_value_calculated: Number(c.total_value_calculated || 0),
           total_paid: Number(c.total_paid || 0),
@@ -67,7 +72,7 @@ export default function ContractsList() {
         setFiltered(enriched);
       } catch (err) {
         console.error("❌ Error loading contracts:", err);
-        toast.error(err.message || "فشل تحميل البيانات");
+        toast.error(err.message || "Error loading data");
       } finally {
         setLoading(false);
       }
@@ -76,11 +81,12 @@ export default function ContractsList() {
     fetchContracts();
   }, [user]);
 
-  // 🔍 الفلاتر
+  // 🔍 All Filters Logic
   useEffect(() => {
     let results = [...contracts];
     const term = searchTerm.toLowerCase();
 
+    // 🔎 Search filter
     if (term) {
       results = results.filter((c) =>
         [c.contract_no, c.tenant_name, c.lessor_name, c.property_type, c.unit_no]
@@ -88,12 +94,42 @@ export default function ContractsList() {
           .some((f) => f.toLowerCase().includes(term))
       );
     }
+
+    // 🔸 Property type
     if (selectedProperty)
       results = results.filter((c) => c.property_type === selectedProperty);
+
+    // 🔸 Contract status
     if (selectedStatus)
       results = results.filter((c) => c.contract_status === selectedStatus);
+
+    // 🔸 City
+    if (selectedCity)
+      results = results.filter((c) => c.city === selectedCity);
+
+    // 🔸 Contract year
+    if (selectedYear)
+      results = results.filter(
+        (c) =>
+          new Date(c.tenancy_start).getFullYear().toString() === selectedYear
+      );
+
+    // 🔸 Office (admin only)
+    if (activeRole === "admin" && selectedOffice)
+      results = results.filter((c) => c.office_name === selectedOffice);
+
+    // 🔸 Payment status (remaining / paid)
+    if (selectedPaymentStatus === "remaining")
+      results = results.filter((c) => c.total_remaining > 0);
+
+    if (selectedPaymentStatus === "paid")
+      results = results.filter((c) => c.total_remaining === 0);
+
+    // 🔸 Advance balance
     if (showAdvanceOnly)
       results = results.filter((c) => Number(c.advance_balance) > 0);
+
+    // 🔸 Due soon (next 30 days)
     if (showDueSoon) {
       const today = new Date();
       const limit = new Date();
@@ -103,17 +139,22 @@ export default function ContractsList() {
         return d && d >= today && d <= limit;
       });
     }
+
     setFiltered(results);
   }, [
     searchTerm,
     selectedProperty,
     selectedStatus,
+    selectedCity,
+    selectedYear,
+    selectedOffice,
+    selectedPaymentStatus,
     showDueSoon,
     showAdvanceOnly,
     contracts,
   ]);
 
-  // 📊 الإحصاءات
+  // 📊 Stats
   const stats = useMemo(() => {
     const totalContracts = filtered.length;
     const totalValue = filtered.reduce(
@@ -129,6 +170,7 @@ export default function ContractsList() {
       0
     );
     const totalRemaining = totalValue - totalPaid;
+
     return { totalContracts, totalValue, totalPaid, totalRemaining, totalAdvance };
   }, [filtered]);
 
@@ -155,12 +197,14 @@ export default function ContractsList() {
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6" dir={i18n.language === "ar" ? "rtl" : "ltr"}>
-        {/* ===== العنوان والفلاتر ===== */}
+        {/* ===== Filters ===== */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <h1 className="text-2xl font-bold text-emerald-700 flex items-center gap-2">
             <FileText /> {t("menu_contracts")}
           </h1>
+
           <div className="flex flex-wrap gap-3 items-center">
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <input
@@ -172,6 +216,7 @@ export default function ContractsList() {
               />
             </div>
 
+            {/* Property type */}
             <select
               value={selectedProperty}
               onChange={(e) => setSelectedProperty(e.target.value)}
@@ -179,12 +224,11 @@ export default function ContractsList() {
             >
               <option value="">{t("allProperties")}</option>
               {[...new Set(contracts.map((c) => c.property_type))].map((p, i) => (
-                <option key={i} value={p}>
-                  {p}
-                </option>
+                <option key={i} value={p}>{p}</option>
               ))}
             </select>
 
+            {/* Contract status */}
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -195,32 +239,86 @@ export default function ContractsList() {
               <option value="منتهي">{t("expired")}</option>
             </select>
 
+            {/* City */}
+            <select
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
+              className="border rounded-lg px-3 py-2"
+            >
+              <option value="">{t("allCities")}</option>
+              {[...new Set(contracts.map((c) => c.city))].filter(Boolean).map((city, i) => (
+                <option key={i} value={city}>{city}</option>
+              ))}
+            </select>
+
+            {/* Year */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="border rounded-lg px-3 py-2"
+            >
+              <option value="">{t("allYears")}</option>
+              {[...new Set(contracts.map(c => new Date(c.tenancy_start).getFullYear()))]
+                .filter(Boolean)
+                .map((year, i) => (
+                  <option key={i} value={year}>{year}</option>
+                ))}
+            </select>
+
+            {/* Office (Admin only) */}
+            {activeRole === "admin" && (
+              <select
+                value={selectedOffice}
+                onChange={(e) => setSelectedOffice(e.target.value)}
+                className="border rounded-lg px-3 py-2"
+              >
+                <option value="">{t("allOffices")}</option>
+                {[...new Set(contracts.map((c) => c.office_name))].map((o, i) => (
+                  <option key={i} value={o}>{o}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Payment status */}
+            <select
+              value={selectedPaymentStatus}
+              onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+              className="border rounded-lg px-3 py-2"
+            >
+              <option value="">{t("allPaymentStatus")}</option>
+              <option value="remaining">{t("remainingOnly")}</option>
+              <option value="paid">{t("fullyPaid")}</option>
+            </select>
+
+            {/* Advance balance filter */}
             <Button
               variant={showAdvanceOnly ? "default" : "outline"}
               onClick={() => setShowAdvanceOnly(!showAdvanceOnly)}
-              className={`flex items-center gap-1 ${
-                showAdvanceOnly ? "bg-green-600 text-white" : ""
-              }`}
+              className={`flex items-center gap-1 ${showAdvanceOnly ? "bg-green-600 text-white" : ""}`}
             >
               <PiggyBank size={16} /> {t("advanceBalance")}
             </Button>
 
+            {/* Due soon filter */}
             <Button
               variant={showDueSoon ? "default" : "outline"}
               onClick={() => setShowDueSoon(!showDueSoon)}
-              className={`flex items-center gap-1 ${
-                showDueSoon ? "bg-yellow-500 text-white" : ""
-              }`}
+              className={`flex items-center gap-1 ${showDueSoon ? "bg-yellow-500 text-white" : ""}`}
             >
               <Calendar size={16} /> {t("dueSoon")}
             </Button>
 
+            {/* Reset */}
             <Button
               variant="outline"
               onClick={() => {
                 setSearchTerm("");
                 setSelectedProperty("");
                 setSelectedStatus("");
+                setSelectedCity("");
+                setSelectedYear("");
+                setSelectedOffice("");
+                setSelectedPaymentStatus("");
                 setShowDueSoon(false);
                 setShowAdvanceOnly(false);
                 setFiltered(contracts);
@@ -229,7 +327,7 @@ export default function ContractsList() {
               <RefreshCcw size={16} className="mr-1" /> {t("resetFilters")}
             </Button>
 
-            {/* ➕ زر إضافة عقد (يظهر فقط للمصرح لهم) */}
+            {/* Add contract */}
             {canAdd && (
               <Button
                 onClick={() => navigate("/contracts/add")}
@@ -241,7 +339,7 @@ export default function ContractsList() {
           </div>
         </div>
 
-        {/* ===== الإحصائيات ===== */}
+        {/* ===== Stats ===== */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <StatCard title={t("totalContracts")} value={stats.totalContracts} icon={<FileText />} />
           <StatCard title={t("totalValue")} value={formatCurrency(stats.totalValue)} icon={<TrendingUp />} />
@@ -250,7 +348,7 @@ export default function ContractsList() {
           <StatCard title={t("advanceBalance")} value={formatCurrency(stats.totalAdvance)} icon={<PiggyBank />} color="text-emerald-600" />
         </div>
 
-        {/* ===== جدول العقود ===== */}
+        {/* ===== Contracts Table ===== */}
         <Card className="bg-white border shadow-md rounded-2xl overflow-hidden">
           <CardHeader className="bg-emerald-50 border-b">
             <CardTitle className="text-emerald-700 text-lg">
@@ -286,6 +384,7 @@ export default function ContractsList() {
                     const dueSoon =
                       c.next_payment_date &&
                       new Date(c.next_payment_date) - new Date() <= 7 * 24 * 60 * 60 * 1000;
+
                     return (
                       <tr
                         key={idx}
@@ -305,7 +404,9 @@ export default function ContractsList() {
                         <td className="p-2">{c.property_type || "—"}</td>
                         <td className="p-2">{c.unit_no || "—"}</td>
                         <td className="p-2">{formatCurrency(c.total_value_calculated)}</td>
-                        <td className="p-2 text-green-700 font-medium">{formatCurrency(c.total_paid)}</td>
+                        <td className="p-2 text-green-700 font-medium">
+                          {formatCurrency(c.total_paid)}
+                        </td>
                         <td className="p-2 text-red-600 font-medium">
                           {c.total_remaining > 0 ? formatCurrency(c.total_remaining) : "—"}
                         </td>
@@ -341,7 +442,7 @@ export default function ContractsList() {
   );
 }
 
-/* ===== بطاقة الإحصاءات ===== */
+/* ===== Stats card component ===== */
 function StatCard({ title, value, icon, color }) {
   return (
     <Card className="border shadow-sm rounded-xl hover:shadow-md transition-all duration-200">

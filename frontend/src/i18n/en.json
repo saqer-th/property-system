@@ -269,7 +269,61 @@
   "menu_reminders": "Reminders",
   "menu_receipts": "Receipts",
   "office_admin": "Office Admin",
-  "menu_admin_dashboard": "Admin Dashboard"
+  "menu_admin_dashboard": "Admin Dashboard",
+  "menu_reports": "Reports",
+  "reportsCenter": "Reports Center",
+  "reportsDescription": "Generate advanced financial and operational reports to manage your properties efficiently.",
+
+  "contractReports": "Contract Reports",
+  "contractSummary": "Contract Summary",
+  "report_contract_summary_desc": "Comprehensive analysis of contract details, payments, and parties involved.",
+  "paymentsReport": "Payments Reports",
+  "report_contract_payments_desc": "Track received, pending, and overdue payments with tenant and contract details.",
+  "expensesReport": "Expenses Reports",
+  "report_contract_expenses_desc": "Analyze expenses by property, unit, or contract with categorized financial insights.",
+
+  "unitReports": "Unit Reports",
+  "unitSummary": "Unit Summary",
+  "report_unit_summary_desc": "Detailed report of unit status, occupancy, payments, and financial overview.",
+  "unitContracts": "Unit Contracts",
+  "report_unit_contracts_desc": "Analyze all contracts linked to a unit, including payments and tenant behavior.",
+
+  "propertyReports": "Property Reports",
+  "propertySummary": "Property Summary",
+  "report_property_summary_desc": "Overview of property units, status, occupancy, and financial performance.",
+  "unitsByProperty": "Units by Property",
+  "report_units_by_property_desc": "View all units related to a property with occupancy and status details.",
+  "contractsByProperty": "Contracts by Property",
+  "report_contracts_by_property_desc": "Analyze all contracts associated with a property, including tenant and financial details.",
+
+  "occupancyReports": "Occupancy Reports",
+  "occupancySummary": "Occupancy Summary",
+  "report_occupancy_desc": "Analyze occupancy rates across properties and units with trend insights.",
+
+  "maintenanceReports": "Maintenance Reports",
+  "maintenanceActivities": "Maintenance Activities",
+  "report_maintenance_desc": "Full overview of maintenance activities, status updates, and related costs.",
+
+  "financialReports": "Financial Reports",
+  "officePayments": "Office Payments",
+  "report_office_payments_desc": "Full breakdown of payment activities related to contracts and tenants.",
+  "officeExpenses": "Office Expenses",
+  "report_office_expenses_desc": "Detailed analysis of office-related expenses by source, category, and date.",
+  "officeReceipts": "Office Receipts",
+  "report_office_receipts_desc": "Review all cash receipts and disbursement vouchers linked to contracts or units.",
+
+  "systemReports": "System Reports",
+  "auditLog": "Audit Log",
+  "report_audit_log_desc": "A complete audit log of all system actions with user and timestamp details.",
+
+  "portfolioReports": "Portfolio Reports",
+  "portfolioSummary": "Portfolio Summary",
+  "report_portfolio_summary_desc": "Comprehensive overview of your real estate portfolio, including financial and operational performance.",
+
+  "profitReports": "Profit Reports",
+  "profitSummary": "Profit Summary",
+  "report_profit_summary_desc": "Analyze net profit based on revenue and expenses across properties and contracts.",
+  "report_profit_desc": "Comprehensive profit analysis comparing revenues and expenses, including net profit and performance periods."
 
 }
 

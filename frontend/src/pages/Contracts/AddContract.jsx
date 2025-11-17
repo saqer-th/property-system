@@ -13,6 +13,62 @@ import Editable from "@/components/common/Editable";
 import PartySection from "@/components/common/PartySection";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { API_URL, API_KEY } from "@/config";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button"; // <-- added
+
+const SAUDI_CITIES = [
+  "الرياض",
+  "جدة",
+  "مكة المكرمة",
+  "المدينة المنورة",
+  "الخبر",
+  "الظهران",
+  "القطيف",
+  "الإحساء",
+  "بريدة",
+  "عنيزة",
+  "حائل",
+  "تبوك",
+  "الطائف",
+  "نجران",
+  "جيزان",
+  "أبها",
+  "خميس مشيط",
+  "بيشة",
+  "ينبع",
+  "الجوف",
+  "عرعر",
+  "القريات",
+  "سكاكا",
+  "الباحة",
+  "القنفذة",
+  "محايل عسير",
+  "رابغ",
+  "الليث",
+  "طريف",
+  "المجمعة",
+  "الخفجي",
+  "رأس تنورة",
+  "حفر الباطن",
+  "الزلفي",
+  "الدوادمي",
+  "شقراء",
+  "وادي الدواسر",
+  "الخرج",
+  "السليل",
+  "الدمام",
+  "صفوى",
+  "سيهات",
+  "تاروت",
+  "الجبيل",
+];
 
 export default function AddContract() {
   const { t, i18n } = useTranslation();
@@ -22,6 +78,8 @@ export default function AddContract() {
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState({});
   const [activeTab, setActiveTab] = useState("contract");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const API_EXTRACT = `${API_URL}/api/extract`;
   const API_SAVE = `${API_URL}/contracts/full`;
@@ -241,6 +299,8 @@ function validateContract(data) {
   if (!data.property?.property_usage) errors.push("استخدام العقار");
   if (!data.property?.num_units) errors.push("عدد الوحدات");
   if (!data.property?.national_address) errors.push("العنوان الوطني");
+  if (!data.property?.city) errors.push("مدينة العقار");   // 👈 إلزامي
+
 
   // 💰 الدفعات
   if (!data.payments?.length) errors.push("يجب إضافة دفعة واحدة على الأقل");
@@ -579,6 +639,27 @@ async function handleSave() {
                         )
                       }
                     />
+
+                    {/* city dropdown */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t("city")}
+                      </label>
+                      <select
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
+                        value={data?.property?.city || ""}
+                        onChange={(e) =>
+                          handleNestedChange("property", "city", e.target.value)
+                        }
+                      >
+                        <option value="">{t("selectCity") || "اختر المدينة"}</option>
+                        {SAUDI_CITIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </>
                 )}
 
@@ -721,7 +802,7 @@ async function handleSave() {
               {/* زر الحفظ */}
               <div className="text-center mt-8">
                 <button
-                  onClick={handleSave}
+                  onClick={() => setShowConfirmDialog(true)} 
                   disabled={saving}
                   className={`flex items-center gap-2 px-8 py-2 mx-auto rounded text-white ${
                     saving ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
@@ -739,6 +820,80 @@ async function handleSave() {
           )}
         </div>
       </div>
+
+      {/* 🧩 نافذة تأكيد الأسماء */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-gray-800">
+              تأكيد أسماء المؤجرين والمستأجرين
+            </DialogTitle>
+            <DialogDescription className="text-gray-600 mt-1">
+              تأكد أن الأسماء أدناه مكتوبة بشكل صحيح قبل حفظ العقد.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-4 border rounded-lg p-3 bg-gray-50 mt-3">
+            <div>
+              <h3 className="font-semibold text-blue-700 mb-2">المؤجرون</h3>
+              <ul className="space-y-1">
+                {(data?.lessors || []).length > 0 ? (
+                  data.lessors.map((l, i) => (
+                    <li key={i} className="text-gray-800">
+                      • {l.name || "—"}
+                    </li>
+                  ))
+                ) : (
+                  <p className="text-gray-400">لا يوجد مؤجرون</p>
+                )}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-green-700 mb-2">المستأجرون</h3>
+              <ul className="space-y-1">
+                {(data?.tenants || []).length > 0 ? (
+                  data.tenants.map((t, i) => (
+                    <li key={i} className="text-gray-800">
+                      • {t.name || "—"}
+                    </li>
+                  ))
+                ) : (
+                  <p className="text-gray-400">لا يوجد مستأجرون</p>
+                )}
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-5 flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              className="border-gray-300 text-gray-600 hover:bg-gray-100"
+            >
+              ❌ إلغاء
+            </Button>
+
+            <Button
+              disabled={confirming}
+              onClick={async () => {
+                setConfirming(true);
+                await handleSave(); // ⚙️ نفّذ الحفظ بعد التأكيد
+                setConfirming(false);
+                setShowConfirmDialog(false);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {confirming ? (
+                <Loader2 className="animate-spin mr-2" size={16} />
+              ) : (
+                "✅ تأكيد الأسماء وحفظ"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </DashboardLayout>
   );
 }

@@ -6023,3 +6023,389 @@ property-system
 └─ uploads
 
 ```
+```
+property-system
+├─ backend
+│  ├─ .dockerignore
+│  ├─ assets
+│  │  └─ system-logo.png
+│  ├─ db
+│  │  └─ pool.js
+│  ├─ Dockerfile
+│  ├─ ejar_api.py
+│  ├─ extract
+│  │  ├─ extract_ejar.py
+│  │  └─ requirements.txt
+│  ├─ helpers
+│  │  └─ permissions.js
+│  ├─ install-chromium.js
+│  ├─ jobs
+│  │  └─ remindersJob.js
+│  ├─ middleware
+│  │  ├─ audit.js
+│  │  ├─ authMiddleware.js
+│  │  ├─ autoAudit.js
+│  │  ├─ checkPermission.js
+│  │  ├─ officeMiddleware.js
+│  │  └─ verifyRole.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ pm2.config.cjs
+│  ├─ routes
+│  │  ├─ admin.js
+│  │  ├─ auth.js
+│  │  ├─ contracts.js
+│  │  ├─ expenses.js
+│  │  ├─ extract.js
+│  │  ├─ maintenance.js
+│  │  ├─ offices.js
+│  │  ├─ payments.js
+│  │  ├─ permissions.js
+│  │  ├─ properties.js
+│  │  ├─ receipts.js
+│  │  ├─ reminders.js
+│  │  ├─ reports.js
+│  │  ├─ units.js
+│  │  └─ users.js
+│  ├─ server.js
+│  ├─ session
+│  ├─ templates
+│  │  └─ report.html
+│  └─ utils
+│     ├─ dbHelpers.js
+│     ├─ pdf.js
+│     ├─ reportService.js
+│     ├─ seedPermissions.js
+│     ├─ seed_reminder_templates.js
+│     ├─ systemLogo.js
+│     └─ whatsappClient.js
+├─ frontend
+│  ├─ components.json
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ postcss.config.js
+│  ├─ public
+│  │  └─ vite.svg
+│  ├─ README.md
+│  ├─ src
+│  │  ├─ App.css
+│  │  ├─ App.jsx
+│  │  ├─ assets
+│  │  │  └─ react.svg
+│  │  ├─ components
+│  │  │  ├─ common
+│  │  │  │  ├─ Editable.jsx
+│  │  │  │  ├─ EditDrawer.jsx
+│  │  │  │  └─ PartySection.jsx
+│  │  │  ├─ expenses
+│  │  │  │  └─ AddExpenseDrawer.jsx
+│  │  │  ├─ layout
+│  │  │  │  ├─ DashboardLayout.jsx
+│  │  │  │  ├─ Navbar.jsx
+│  │  │  │  └─ Sidebar.jsx
+│  │  │  ├─ properties
+│  │  │  │  └─ AddPropertyDrawer.jsx
+│  │  │  ├─ ProtectedRoute.jsx
+│  │  │  ├─ receipts
+│  │  │  │  └─ AddReceiptDrawer.jsx
+│  │  │  ├─ RoleSwitcher.jsx
+│  │  │  ├─ ui
+│  │  │  │  ├─ badge.tsx
+│  │  │  │  ├─ button.tsx
+│  │  │  │  ├─ calendar.tsx
+│  │  │  │  ├─ card.tsx
+│  │  │  │  ├─ checkbox.tsx
+│  │  │  │  ├─ dialog.tsx
+│  │  │  │  ├─ drawer.tsx
+│  │  │  │  ├─ dropdown-menu.tsx
+│  │  │  │  ├─ input.tsx
+│  │  │  │  ├─ label.tsx
+│  │  │  │  ├─ popover.tsx
+│  │  │  │  ├─ switch.tsx
+│  │  │  │  ├─ tabs.tsx
+│  │  │  │  └─ textarea.tsx
+│  │  │  └─ units
+│  │  │     └─ AddUnitDrawer.jsx
+│  │  ├─ config.js
+│  │  ├─ context
+│  │  │  └─ AuthContext.jsx
+│  │  ├─ i18n
+│  │  │  ├─ ar
+│  │  │  │  └─ translation.json
+│  │  │  ├─ ar.json
+│  │  │  ├─ en
+│  │  │  │  └─ translation.json
+│  │  │  ├─ en.json
+│  │  │  └─ index.js
+│  │  ├─ index.css
+│  │  ├─ lib
+│  │  │  └─ utils.ts
+│  │  ├─ main.jsx
+│  │  └─ pages
+│  │     ├─ admin
+│  │     │  ├─ AdminDashboard.jsx
+│  │     │  └─ tabs
+│  │     │     ├─ AuditTab.jsx
+│  │     │     ├─ OfficesTab.jsx
+│  │     │     ├─ ReportsTab.jsx
+│  │     │     ├─ RolesTab.jsx
+│  │     │     ├─ SubscriptionsTab.jsx
+│  │     │     └─ UsersTab.jsx
+│  │     ├─ Auth
+│  │     │  ├─ Login.jsx
+│  │     │  ├─ RegisterOffice.jsx
+│  │     │  └─ Unauthorized.jsx
+│  │     ├─ Contracts
+│  │     │  ├─ AddContract.jsx
+│  │     │  ├─ ContractDetails.jsx
+│  │     │  └─ ContractsList.jsx
+│  │     ├─ Dashboard.jsx
+│  │     ├─ Expenses
+│  │     │  └─ ExpensesList.jsx
+│  │     ├─ Maintenance
+│  │     │  └─ MaintenanceList.jsx
+│  │     ├─ offices
+│  │     │  ├─ Employees
+│  │     │  │  └─ EmployeesList.jsx
+│  │     │  ├─ OfficeDetails.jsx
+│  │     │  ├─ OfficeEmployees.jsx
+│  │     │  ├─ RemindersLog.jsx
+│  │     │  ├─ RemindersSettings.jsx
+│  │     │  └─ TemplatesPreview.jsx
+│  │     ├─ Payments
+│  │     │  └─ PaymentsList.jsx
+│  │     ├─ Properties
+│  │     │  ├─ PropertiesList.jsx
+│  │     │  └─ PropertyDetails.jsx
+│  │     ├─ Receipts
+│  │     │  └─ ReceiptsList.jsx
+│  │     ├─ reports
+│  │     │  ├─ Contract
+│  │     │  │  ├─ ContractExpenses.jsx
+│  │     │  │  ├─ ContractPayments.jsx
+│  │     │  │  └─ ContractSummary.jsx
+│  │     │  ├─ Financial
+│  │     │  │  ├─ Expenses.jsx
+│  │     │  │  ├─ Payments.jsx
+│  │     │  │  └─ Receipts.jsx
+│  │     │  ├─ Occupancy
+│  │     │  │  └─ OccupancyReport.jsx
+│  │     │  ├─ Portfolio
+│  │     │  │  └─ PortfolioReport.jsx
+│  │     │  ├─ Profit
+│  │     │  │  └─ ProfitReport.jsx
+│  │     │  ├─ Property
+│  │     │  │  ├─ PropertyContracts.jsx
+│  │     │  │  ├─ PropertySummary.jsx
+│  │     │  │  └─ PropertyUnits.jsx
+│  │     │  ├─ ReportsHome.jsx
+│  │     │  └─ Unit
+│  │     │     ├─ UnitContracts.jsx
+│  │     │     └─ UnitSummary.jsx
+│  │     ├─ Settings
+│  │     │  └─ Settings.jsx
+│  │     └─ Units
+│  │        └─ UnitDetails.jsx
+│  ├─ tailwind.config.js
+│  ├─ tsconfig.json
+│  ├─ vercel.json
+│  └─ vite.config.js
+├─ README.md
+└─ render.yaml
+
+```
+```
+property-system
+├─ backend
+│  ├─ .dockerignore
+│  ├─ assets
+│  │  └─ system-logo.png
+│  ├─ db
+│  │  └─ pool.js
+│  ├─ Dockerfile
+│  ├─ ejar_api.py
+│  ├─ extract
+│  │  ├─ extract_ejar.py
+│  │  └─ requirements.txt
+│  ├─ helpers
+│  │  └─ permissions.js
+│  ├─ install-chromium.js
+│  ├─ jobs
+│  │  └─ remindersJob.js
+│  ├─ middleware
+│  │  ├─ audit.js
+│  │  ├─ authMiddleware.js
+│  │  ├─ autoAudit.js
+│  │  ├─ checkPermission.js
+│  │  ├─ officeMiddleware.js
+│  │  └─ verifyRole.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ pm2.config.cjs
+│  ├─ routes
+│  │  ├─ admin.js
+│  │  ├─ auth.js
+│  │  ├─ contracts.js
+│  │  ├─ expenses.js
+│  │  ├─ extract.js
+│  │  ├─ maintenance.js
+│  │  ├─ offices.js
+│  │  ├─ payments.js
+│  │  ├─ permissions.js
+│  │  ├─ properties.js
+│  │  ├─ receipts.js
+│  │  ├─ reminders.js
+│  │  ├─ reports.js
+│  │  ├─ units.js
+│  │  └─ users.js
+│  ├─ server.js
+│  ├─ session
+│  ├─ templates
+│  │  └─ report.html
+│  └─ utils
+│     ├─ dbHelpers.js
+│     ├─ pdf.js
+│     ├─ reportService.js
+│     ├─ seedPermissions.js
+│     ├─ seed_reminder_templates.js
+│     ├─ systemLogo.js
+│     └─ whatsappClient.js
+├─ frontend
+│  ├─ components.json
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ postcss.config.js
+│  ├─ public
+│  │  └─ vite.svg
+│  ├─ README.md
+│  ├─ src
+│  │  ├─ App.css
+│  │  ├─ App.jsx
+│  │  ├─ assets
+│  │  │  └─ react.svg
+│  │  ├─ components
+│  │  │  ├─ common
+│  │  │  │  ├─ Editable.jsx
+│  │  │  │  ├─ EditDrawer.jsx
+│  │  │  │  └─ PartySection.jsx
+│  │  │  ├─ expenses
+│  │  │  │  └─ AddExpenseDrawer.jsx
+│  │  │  ├─ layout
+│  │  │  │  ├─ DashboardLayout.jsx
+│  │  │  │  ├─ Navbar.jsx
+│  │  │  │  └─ Sidebar.jsx
+│  │  │  ├─ properties
+│  │  │  │  └─ AddPropertyDrawer.jsx
+│  │  │  ├─ ProtectedRoute.jsx
+│  │  │  ├─ receipts
+│  │  │  │  └─ AddReceiptDrawer.jsx
+│  │  │  ├─ RoleSwitcher.jsx
+│  │  │  ├─ ui
+│  │  │  │  ├─ badge.tsx
+│  │  │  │  ├─ button.tsx
+│  │  │  │  ├─ calendar.tsx
+│  │  │  │  ├─ card.tsx
+│  │  │  │  ├─ checkbox.tsx
+│  │  │  │  ├─ dialog.tsx
+│  │  │  │  ├─ drawer.tsx
+│  │  │  │  ├─ dropdown-menu.tsx
+│  │  │  │  ├─ input.tsx
+│  │  │  │  ├─ label.tsx
+│  │  │  │  ├─ popover.tsx
+│  │  │  │  ├─ switch.tsx
+│  │  │  │  ├─ tabs.tsx
+│  │  │  │  └─ textarea.tsx
+│  │  │  └─ units
+│  │  │     └─ AddUnitDrawer.jsx
+│  │  ├─ config.js
+│  │  ├─ context
+│  │  │  └─ AuthContext.jsx
+│  │  ├─ i18n
+│  │  │  ├─ ar
+│  │  │  │  └─ translation.json
+│  │  │  ├─ ar.json
+│  │  │  ├─ en
+│  │  │  │  └─ translation.json
+│  │  │  ├─ en.json
+│  │  │  └─ index.js
+│  │  ├─ index.css
+│  │  ├─ lib
+│  │  │  └─ utils.ts
+│  │  ├─ main.jsx
+│  │  └─ pages
+│  │     ├─ admin
+│  │     │  ├─ AdminDashboard.jsx
+│  │     │  └─ tabs
+│  │     │     ├─ AuditTab.jsx
+│  │     │     ├─ OfficesTab.jsx
+│  │     │     ├─ ReportsTab.jsx
+│  │     │     ├─ RolesTab.jsx
+│  │     │     ├─ SubscriptionsTab.jsx
+│  │     │     └─ UsersTab.jsx
+│  │     ├─ Auth
+│  │     │  ├─ Login.jsx
+│  │     │  ├─ RegisterOffice.jsx
+│  │     │  └─ Unauthorized.jsx
+│  │     ├─ Contracts
+│  │     │  ├─ AddContract.jsx
+│  │     │  ├─ ContractDetails.jsx
+│  │     │  └─ ContractsList.jsx
+│  │     ├─ Dashboard.jsx
+│  │     ├─ Expenses
+│  │     │  └─ ExpensesList.jsx
+│  │     ├─ Maintenance
+│  │     │  └─ MaintenanceList.jsx
+│  │     ├─ offices
+│  │     │  ├─ Employees
+│  │     │  │  └─ EmployeesList.jsx
+│  │     │  ├─ OfficeDetails.jsx
+│  │     │  ├─ OfficeEmployees.jsx
+│  │     │  ├─ RemindersLog.jsx
+│  │     │  ├─ RemindersSettings.jsx
+│  │     │  └─ TemplatesPreview.jsx
+│  │     ├─ Payments
+│  │     │  └─ PaymentsList.jsx
+│  │     ├─ Properties
+│  │     │  ├─ PropertiesList.jsx
+│  │     │  └─ PropertyDetails.jsx
+│  │     ├─ Receipts
+│  │     │  └─ ReceiptsList.jsx
+│  │     ├─ reports
+│  │     │  ├─ Contract
+│  │     │  │  ├─ ContractExpenses.jsx
+│  │     │  │  ├─ ContractPayments.jsx
+│  │     │  │  └─ ContractSummary.jsx
+│  │     │  ├─ Financial
+│  │     │  │  ├─ Expenses.jsx
+│  │     │  │  ├─ Payments.jsx
+│  │     │  │  └─ Receipts.jsx
+│  │     │  ├─ Occupancy
+│  │     │  │  └─ OccupancyReport.jsx
+│  │     │  ├─ Portfolio
+│  │     │  │  └─ PortfolioReport.jsx
+│  │     │  ├─ Profit
+│  │     │  │  └─ ProfitReport.jsx
+│  │     │  ├─ Property
+│  │     │  │  ├─ PropertyContracts.jsx
+│  │     │  │  ├─ PropertySummary.jsx
+│  │     │  │  └─ PropertyUnits.jsx
+│  │     │  ├─ ReportsHome.jsx
+│  │     │  └─ Unit
+│  │     │     ├─ UnitContracts.jsx
+│  │     │     └─ UnitSummary.jsx
+│  │     ├─ Settings
+│  │     │  └─ Settings.jsx
+│  │     └─ Units
+│  │        └─ UnitDetails.jsx
+│  ├─ tailwind.config.js
+│  ├─ tsconfig.json
+│  ├─ vercel.json
+│  └─ vite.config.js
+├─ README.md
+└─ render.yaml
+
+```

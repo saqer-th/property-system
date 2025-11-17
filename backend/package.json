@@ -14,7 +14,6 @@
     "dev": "nodemon server.js",
     "build-chromium": "node install-chromium.js",
     "postinstall": "pip3 install --break-system-packages -r extract/requirements.txt || true"
-
   },
   "dependencies": {
     "@open-wa/wa-automate": "4.76.0",
@@ -24,6 +23,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "form-data": "^4.0.4",
+    "handlebars": "^4.7.8",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",

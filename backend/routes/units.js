@@ -15,50 +15,72 @@ router.get("/my", verifyToken, async (req, res) => {
     let query = "";
     let params = [];
 
-    /* 👑 الأدمن يشاهد جميع الوحدات */
+    /* ----------------------------------------------------
+       🟩 1) أدمن → يشاهد كل الوحدات + العقود المرتبطة بها
+    ---------------------------------------------------- */
     if (activeRole === "admin") {
       query = `
         SELECT 
-          u.id, u.unit_no, u.unit_type, u.status, u.unit_area,
-          p.id AS property_id, p.property_name, p.property_type, p.property_usage,
-          o.name AS office_name
+          u.id, u.unit_no, u.unit_type, u.unit_area,
+          p.id AS property_id, p.property_type, p.property_usage, p.title_deed_no,
+          COALESCE(
+            ARRAY(
+              SELECT cu.contract_id 
+              FROM contract_units cu 
+              WHERE cu.unit_id = u.id
+              ORDER BY cu.start_date DESC
+            ), '{}'
+          ) AS contract_ids
         FROM units u
         LEFT JOIN properties p ON p.id = u.property_id
-        LEFT JOIN contracts c ON c.id = u.contract_id
-        LEFT JOIN offices o ON o.id = c.office_id
         ORDER BY p.id, u.unit_no;
       `;
     }
 
-    /* 🏢 المكتب يشاهد فقط الوحدات التابعة لعقود مكتبه */
+    /* ----------------------------------------------------
+       🟦 2) مكتب → يرى الوحدات التي مرت بعقود مكتبه
+    ---------------------------------------------------- */
     else if (["office", "office_admin"].includes(activeRole)) {
       query = `
-        SELECT 
-          u.id, u.unit_no, u.unit_type, u.status, u.unit_area,
-          p.id AS property_id, p.property_name, p.property_type, p.property_usage,
-          o.name AS office_name
+        SELECT DISTINCT
+          u.id, u.unit_no, u.unit_type, u.unit_area,
+          p.id AS property_id, p.property_type, p.property_usage, p.title_deed_no
         FROM units u
-        JOIN contracts c ON c.id = u.contract_id
-        JOIN offices o ON o.id = c.office_id
-        LEFT JOIN properties p ON p.id = u.property_id
-        WHERE o.owner_id = $1
+        JOIN properties p ON p.id = u.property_id
+        LEFT JOIN contract_units cu ON cu.unit_id = u.id
+        LEFT JOIN contracts c ON c.id = cu.contract_id
+        WHERE 
+          -- 🔹 الوحدات التابعة لعقارات المكتب
+          p.office_id IN (
+            SELECT office_id FROM office_users WHERE user_id = $1
+            UNION
+            SELECT id FROM offices WHERE owner_id = $1
+          )
+          OR
+          -- 🔹 الوحدات التي مرت بعقود المكتب
+          c.office_id IN (
+            SELECT office_id FROM office_users WHERE user_id = $1
+            UNION
+            SELECT id FROM offices WHERE owner_id = $1
+          )
         ORDER BY p.id, u.unit_no;
       `;
       params = [userId];
     }
 
-    /* 🏠 المالك يرى وحداته فقط (كمؤجر) */
+    /* ----------------------------------------------------
+       🟨 3) مالك → يرى وحداته التي عليها أي عقد كمؤجر
+    ---------------------------------------------------- */
     else if (["owner", "مالك"].includes(activeRole)) {
       query = `
-        SELECT 
-          u.id, u.unit_no, u.unit_type, u.status, u.unit_area,
-          p.id AS property_id, p.property_name, p.property_type, p.property_usage,
-          o.name AS office_name
+        SELECT DISTINCT
+          u.id, u.unit_no, u.unit_type, u.unit_area,
+          p.id AS property_id, p.property_type, p.property_usage, p.title_deed_no
         FROM units u
-        JOIN contracts c ON c.id = u.contract_id
+        JOIN contract_units cu ON cu.unit_id = u.id
+        JOIN contracts c ON c.id = cu.contract_id
         JOIN contract_parties cp ON cp.contract_id = c.id
         JOIN parties pr ON pr.id = cp.party_id
-        LEFT JOIN offices o ON o.id = c.office_id
         LEFT JOIN properties p ON p.id = u.property_id
         WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
           AND REPLACE(REPLACE(pr.phone,'+966','0'),' ','') = REPLACE(REPLACE($1,'+966','0'),' ','')
@@ -67,18 +89,19 @@ router.get("/my", verifyToken, async (req, res) => {
       params = [phone];
     }
 
-    /* 👤 المستأجر يرى الوحدات المرتبطة بعقوده */
+    /* ----------------------------------------------------
+       🟧 4) مستأجر → يرى الوحدات التي استأجرها
+    ---------------------------------------------------- */
     else if (["tenant", "مستأجر"].includes(activeRole)) {
       query = `
-        SELECT 
-          u.id, u.unit_no, u.unit_type, u.status, u.unit_area,
-          p.id AS property_id, p.property_name, p.property_type, p.property_usage,
-          o.name AS office_name
+        SELECT DISTINCT
+          u.id, u.unit_no, u.unit_type, u.unit_area,
+          p.id AS property_id, p.property_type, p.property_usage, p.title_deed_no
         FROM units u
-        JOIN contracts c ON c.id = u.contract_id
+        JOIN contract_units cu ON cu.unit_id = u.id
+        JOIN contracts c ON c.id = cu.contract_id
         JOIN contract_parties cp ON cp.contract_id = c.id
         JOIN parties t ON t.id = cp.party_id
-        LEFT JOIN offices o ON o.id = c.office_id
         LEFT JOIN properties p ON p.id = u.property_id
         WHERE LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
           AND REPLACE(REPLACE(t.phone,'+966','0'),' ','') = REPLACE(REPLACE($1,'+966','0'),' ','')
@@ -87,27 +110,31 @@ router.get("/my", verifyToken, async (req, res) => {
       params = [phone];
     }
 
-    /* 🚫 غير مصرح له */
+    /* ----------------------------------------------------
+       🚫 5) صلاحية غير معروفة
+    ---------------------------------------------------- */
     else {
       return res.status(403).json({
         success: false,
-        message: "🚫 لا تملك صلاحية للوصول إلى هذه البيانات.",
+        message: "🚫 لا تملك صلاحية للوصول إلى البيانات",
       });
     }
 
+    /* 🔍 تنفيذ الاستعلام */
     const { rows } = await client.query(query, params);
 
     res.json({
       success: true,
       total: rows.length,
-      message: "✅ تم جلب الوحدات بنجاح.",
+      message: "✅ تم جلب الوحدات بنجاح",
       data: rows,
     });
+
   } catch (err) {
-    console.error("❌ Error fetching user's units:", err);
+    console.error("❌ Error fetching my units:", err);
     res.status(500).json({
       success: false,
-      message: "حدث خطأ أثناء تحميل الوحدات.",
+      message: "حدث خطأ أثناء تحميل الوحدات",
       details: err.message,
     });
   } finally {
@@ -115,26 +142,36 @@ router.get("/my", verifyToken, async (req, res) => {
   }
 });
 
+
 /* =========================================================
-   🏗️ 2️⃣ جلب تفاصيل وحدة معينة (العقود + المصروفات)
+   🏗️ جلب تفاصيل وحدة معينة (تشمل العقود والمصروفات)
    ========================================================= */
 router.get("/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
+  const { id: unitId } = req.params;
   const { activeRole, id: userId, phone } = req.user;
   const client = await pool.connect();
 
   try {
-    // ✅ جلب بيانات الوحدة
+    /* --------------------------------------------------------
+       1️⃣ جلب بيانات الوحدة
+    -------------------------------------------------------- */
     const unitRes = await client.query(
-      `SELECT u.*, o.name AS office_name, o.id AS office_id, o.owner_id
-       FROM units u
-       LEFT JOIN contracts c ON c.id = u.contract_id
-       LEFT JOIN offices o ON o.id = c.office_id
-       WHERE u.id = $1`,
-      [id]
+      `
+      SELECT 
+        u.*,
+        p.title_deed_no,
+        p.property_type,
+        p.property_usage,
+        p.national_address,
+        p.num_units
+      FROM units u
+      LEFT JOIN properties p ON p.id = u.property_id
+      WHERE u.id = $1
+      `,
+      [unitId]
     );
 
-    if (unitRes.rows.length === 0) {
+    if (unitRes.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: "❌ الوحدة غير موجودة.",
@@ -142,51 +179,129 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 
     const unit = unitRes.rows[0];
+
+    /* --------------------------------------------------------
+       2️⃣ جلب كل العقود المرتبطة بالوحدة من contract_units
+    -------------------------------------------------------- */
+    const contractsRes = await client.query(
+      `
+      SELECT 
+        c.id,
+        c.contract_no,
+        c.tenancy_start,
+        c.tenancy_end,
+        c.annual_rent,
+        o.name AS office_name,
+        CASE 
+          WHEN CURRENT_DATE BETWEEN c.tenancy_start AND c.tenancy_end
+          THEN 'نشط'
+          ELSE 'منتهي'
+        END AS contract_status
+      FROM contract_units cu
+      JOIN contracts c ON c.id = cu.contract_id
+      LEFT JOIN offices o ON o.id = c.office_id
+      WHERE cu.unit_id = $1
+      ORDER BY c.tenancy_start DESC
+      `,
+      [unitId]
+    );
+
+    /* --------------------------------------------------------
+       3️⃣ جلب المستأجر لكل عقد
+    -------------------------------------------------------- */
+    const contractsWithTenant = [];
+
+    for (const c of contractsRes.rows) {
+      const tenantRes = await client.query(
+        `
+        SELECT pt.name, pt.phone
+        FROM contract_parties cp
+        JOIN parties pt ON pt.id = cp.party_id
+        WHERE cp.contract_id = $1
+          AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+        LIMIT 1
+        `,
+        [c.id]
+      );
+
+      contractsWithTenant.push({
+        ...c,
+        tenant_name: tenantRes.rows[0]?.name || null,
+        tenant_phone: tenantRes.rows[0]?.phone || null,
+      });
+    }
+
+    /* --------------------------------------------------------
+       4️⃣ العقد النشط الحالي (إن وجد)
+    -------------------------------------------------------- */
+    const activeContract = contractsWithTenant.find(
+      (c) =>
+        c.tenancy_start &&
+        c.tenancy_end &&
+        new Date() >= new Date(c.tenancy_start) &&
+        new Date() <= new Date(c.tenancy_end)
+    );
+    const unit_status = activeContract ? "occupied" : "vacant";
+
+    /* --------------------------------------------------------
+       5️⃣ التحقق من الصلاحيات
+    -------------------------------------------------------- */
     let allowed = false;
 
-    // ✅ الأدمن يشوف كل شيء
-    if (activeRole === "admin") {
-      allowed = true;
-    }
-    // ✅ المكتب أو المشرف يشوف الوحدات التابعة لمكتبه (مالك أو موظف)
+    if (activeRole === "admin") allowed = true;
+
     else if (["office", "office_admin"].includes(activeRole)) {
-      if (unit.office_id) {
-        const officeCheck = await client.query(
-          `SELECT 1 FROM offices 
-           WHERE id = $1 
-           AND (owner_id = $2 OR id IN (SELECT office_id FROM office_users WHERE user_id = $2))`,
-          [unit.office_id, userId]
-        );
-        allowed = officeCheck.rows.length > 0;
-      }
+      const officeCheck = await client.query(
+        `
+        SELECT 1
+        FROM contract_units cu
+        JOIN contracts c ON c.id = cu.contract_id
+        WHERE cu.unit_id = $1
+          AND (
+            c.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
+            OR c.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
+          )
+        LIMIT 1
+        `,
+        [unitId, userId]
+      );
+      allowed = officeCheck.rowCount > 0;
     }
-    // ✅ المالك يشوف فقط وحداته
+
     else if (["owner", "مالك"].includes(activeRole)) {
-      if (unit.contract_id) {
-        const ownerCheck = await client.query(
-          `SELECT 1 FROM contract_parties cp
-           JOIN parties p ON p.id = cp.party_id
-           WHERE cp.contract_id = $1
-           AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-           AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')`,
-          [unit.contract_id, phone]
-        );
-        allowed = ownerCheck.rows.length > 0;
-      }
+      const ownerCheck = await client.query(
+        `
+        SELECT 1
+        FROM contract_units cu
+        JOIN contracts c ON c.id = cu.contract_id
+        JOIN contract_parties cp ON cp.contract_id = c.id
+        JOIN parties pt ON pt.id = cp.party_id
+        WHERE cu.unit_id = $1
+          AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+          AND REPLACE(REPLACE(pt.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
+        LIMIT 1
+        `,
+        [unitId, phone]
+      );
+      allowed = ownerCheck.rowCount > 0;
     }
-    // ✅ المستأجر يشوف فقط وحداته
+
     else if (["tenant", "مستأجر"].includes(activeRole)) {
-      if (unit.contract_id) {
-        const tenantCheck = await client.query(
-          `SELECT 1 FROM contract_parties cp
-           JOIN parties p ON p.id = cp.party_id
-           WHERE cp.contract_id = $1
-           AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-           AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')`,
-          [unit.contract_id, phone]
-        );
-        allowed = tenantCheck.rows.length > 0;
-      }
+      const tenantCheck = await client.query(
+        `
+        SELECT 1
+        FROM contract_units cu
+        JOIN contracts c ON c.id = cu.contract_id
+        JOIN contract_parties cp ON cp.contract_id = c.id
+        JOIN parties pt ON pt.id = cp.party_id
+        WHERE cu.unit_id = $1
+          AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+          AND REPLACE(REPLACE(pt.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
+        LIMIT 1
+        `,
+        [unitId, phone]
+      );
+      allowed = tenantCheck.rowCount > 0;
     }
 
     if (!allowed) {
@@ -196,29 +311,37 @@ router.get("/:id", verifyToken, async (req, res) => {
       });
     }
 
-    // 📜 جلب العقود الخاصة بالوحدة
-    const contractsRes = await client.query(
-      `SELECT * FROM contracts WHERE id = $1 ORDER BY tenancy_start DESC;`,
-      [unit.contract_id]
-    );
-
-    // 💸 جلب المصروفات الخاصة بالوحدة
+    /* --------------------------------------------------------
+       6️⃣ المصروفات
+    -------------------------------------------------------- */
     const expensesRes = await client.query(
-      `SELECT id, expense_type, on_whom, amount, notes, date
-       FROM expenses
-       WHERE unit_id = $1
-       ORDER BY date DESC, id DESC;`,
-      [id]
+      `
+      SELECT *
+      FROM expenses
+      WHERE unit_id = $1
+      ORDER BY date DESC
+      `,
+      [unitId]
     );
 
-    // ✅ الإرجاع النهائي
+    /* --------------------------------------------------------
+       7️⃣ الإرجاع النهائي
+    -------------------------------------------------------- */
     res.json({
       success: true,
       message: "✅ تم جلب تفاصيل الوحدة بنجاح.",
       data: {
         ...unit,
-        contracts: contractsRes.rows,
+        status: unit_status,
+        // عقد نشط واحد إن وجد
+        active_contract: activeContract || null,
+
+        // كل العقود (قديم + جديد)
+        contracts: contractsWithTenant,
+        contracts_count: contractsWithTenant.length,
+
         expenses: expensesRes.rows,
+        expenses_count: expensesRes.rowCount,
       },
     });
   } catch (err) {
@@ -232,6 +355,122 @@ router.get("/:id", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
+
+
+
+
+
+router.put("/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  let {
+    unit_no,
+    unit_type,
+    unit_area,
+    electric_meter_no,
+    water_meter_no
+  } = req.body;
+
+  try {
+    /* --------------------------------------------------------
+       1️⃣ تأكد أن الوحدة موجودة
+    -------------------------------------------------------- */
+    const unitRes = await pool.query(
+      `SELECT id, unit_no 
+       FROM units 
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (unitRes.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ الوحدة غير موجودة"
+      });
+    }
+
+    const existing = unitRes.rows[0];
+
+    /* --------------------------------------------------------
+       2️⃣ منع تغيير رقم الوحدة إذا كانت مرتبطة بعقد
+    -------------------------------------------------------- */
+    if (unit_no && unit_no !== existing.unit_no) {
+      const linked = await pool.query(
+        `SELECT 1 FROM contract_units WHERE unit_id=$1 LIMIT 1`,
+        [id]
+      );
+
+      if (linked.rowCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "⚠️ لا يمكن تعديل رقم الوحدة لأنها مرتبطة بعقد. يمكنك تعديل العداد والمساحة فقط."
+        });
+      }
+    }
+
+    /* --------------------------------------------------------
+       3️⃣ تنظيف الفالديشن
+    -------------------------------------------------------- */
+    if (unit_no && !/^\d+$/.test(unit_no)) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ رقم الوحدة يجب أن يكون أرقام فقط"
+      });
+    }
+
+    if (unit_area && isNaN(Number(unit_area))) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ مساحة الوحدة يجب أن تكون رقم"
+      });
+    }
+
+    /* --------------------------------------------------------
+       4️⃣ التحديث
+    -------------------------------------------------------- */
+    const updateRes = await pool.query(
+      `
+      UPDATE units
+      SET
+        unit_no = COALESCE($1, unit_no),
+        unit_type = COALESCE($2, unit_type),
+        unit_area = COALESCE($3, unit_area),
+        electric_meter_no = COALESCE($4, electric_meter_no),
+        water_meter_no = COALESCE($5, water_meter_no),
+        updated_at = NOW()
+      WHERE id = $6
+      RETURNING 
+        id, unit_no, unit_type, unit_area, electric_meter_no, water_meter_no
+      `,
+      [
+        unit_no || null,
+        unit_type || null,
+        unit_area || null,
+        electric_meter_no || null,
+        water_meter_no || null,
+        id
+      ]
+    );
+
+    /* --------------------------------------------------------
+       5️⃣ النجاح
+    -------------------------------------------------------- */
+    res.json({
+      success: true,
+      message: "✅ تم تحديث بيانات الوحدة بنجاح",
+      data: updateRes.rows[0]
+    });
+
+  } catch (err) {
+    console.error("❌ Error updating unit:", err);
+    res.status(500).json({
+      success: false,
+      message: "حدث خطأ أثناء تحديث بيانات الوحدة",
+      details: err.message
+    });
+  }
+});
+
 
 
 /* =========================================================
@@ -252,8 +491,8 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
           u.id, u.unit_no, u.unit_type, u.property_id, 
           u.status, c.office_id, o.name AS office_name
         FROM units u
-        LEFT JOIN contracts c ON c.id = u.contract_id
-        LEFT JOIN offices o ON o.id = c.office_id
+        LEFT JOIN properties p ON p.id = u.property_id
+        LEFT JOIN offices o ON o.id = p.office_id
         WHERE u.property_id = $1
         ORDER BY u.unit_no;
       `;
@@ -264,15 +503,18 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
     else if (["office", "office_admin"].includes(activeRole)) {
       query = `
         SELECT 
-          u.id, u.unit_no, u.unit_type, u.property_id, 
-          u.status, c.office_id, o.name AS office_name
+          u.id, u.unit_no, u.unit_type, u.property_id,
+          u.status,
+          p.office_id,
+          o.name AS office_name
         FROM units u
-        LEFT JOIN contracts c ON c.id = u.contract_id
-        LEFT JOIN offices o ON o.id = c.office_id
-        WHERE u.property_id = $1
+        JOIN properties p ON p.id = u.property_id
+        JOIN offices o ON o.id = p.office_id
+        WHERE 
+          u.property_id = $1
           AND (
-            o.owner_id = $2
-            OR o.id IN (SELECT office_id FROM office_users WHERE user_id = $2)
+            p.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
+            OR p.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
           )
         ORDER BY u.unit_no;
       `;
@@ -285,7 +527,8 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
         SELECT DISTINCT 
           u.id, u.unit_no, u.unit_type, u.property_id, u.status
         FROM units u
-        JOIN contracts c ON c.id = u.contract_id
+        JOIN contract_units cu ON cu.unit_id = u.id
+JOIN contracts c ON c.id = cu.contract_id
         JOIN contract_parties cp ON cp.contract_id = c.id
         JOIN parties p ON p.id = cp.party_id
         WHERE u.property_id = $1
@@ -302,7 +545,8 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
         SELECT DISTINCT 
           u.id, u.unit_no, u.unit_type, u.property_id, u.status
         FROM units u
-        JOIN contracts c ON c.id = u.contract_id
+        JOIN contract_units cu ON cu.unit_id = u.id
+JOIN contracts c ON c.id = cu.contract_id
         JOIN contract_parties cp ON cp.contract_id = c.id
         JOIN parties p ON p.id = cp.party_id
         WHERE u.property_id = $1
@@ -333,4 +577,68 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
   }
 });
 
+/* =========================================================
+   ➕ إضافة وحدة جديدة (POST /units)
+   ========================================================= */
+router.post("/", async (req, res) => {
+  const { unit_no, unit_type, unit_area, electric_meter_no, water_meter_no, status, notes, property_id } = req.body;
+
+  try {
+    // 🔹 التحقق من البيانات الأساسية
+    if (!unit_no || !property_id || !unit_type) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ رقم الوحدة ونوعها والعقار مطلوبة.",
+      });
+    }
+
+    // 🔹 تحقق أن رقم الوحدة يحتوي فقط على أرقام
+    if (!/^[0-9]+$/.test(unit_no)) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ رقم الوحدة يجب أن يحتوي على أرقام فقط.",
+      });
+    }
+
+    // 🔹 تحقق من عدم وجود وحدة بنفس الرقم في نفس العقار
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM units WHERE property_id = $1 AND unit_no = $2`,
+      [property_id, unit_no]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `❌ توجد وحدة أخرى بنفس الرقم (${unit_no}) ضمن نفس العقار.`,
+      });
+    }
+
+    // 🔹 إدخال الوحدة الجديدة
+    const { rows } = await pool.query(
+      `
+      INSERT INTO units (
+        unit_no, unit_type, unit_area,
+        electric_meter_no, water_meter_no,
+        status, property_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, unit_no, unit_type, unit_area, status
+      `,
+      [unit_no, unit_type, unit_area || null, electric_meter_no || null, water_meter_no || null, status || "vacant" || null, property_id]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "✅ تم إضافة الوحدة بنجاح.",
+      data: rows[0],
+    });
+  } catch (err) {
+    console.error("❌ Error adding unit:", err);
+    res.status(500).json({
+      success: false,
+      message: "حدث خطأ أثناء إضافة الوحدة.",
+      details: err.message,
+    });
+  }
+});
 export default router;

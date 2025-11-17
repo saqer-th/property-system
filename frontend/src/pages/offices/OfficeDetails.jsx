@@ -88,12 +88,12 @@ export default function OfficeDetails() {
             </CardTitle>
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium ${
-                office?.status === "active"
+                office?.status === "approved"
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-red-100 text-red-700"
               }`}
             >
-              {office?.status === "active" ? "نشط" : "موقوف"}
+              {office?.status === "approved" ? "نشط" : "موقوف"}
             </span>
           </CardHeader>
 
@@ -116,7 +116,7 @@ export default function OfficeDetails() {
             <p>
               <b>تاريخ الإنشاء:</b>{" "}
               {office?.created_at
-                ? new Date(office.created_at).toLocaleDateString("ar-SA")
+                ? new Date(office.created_at).toLocaleDateString("en-GB").replace(/\//g, "-")
                 : "—"}
             </p>
           </CardContent>

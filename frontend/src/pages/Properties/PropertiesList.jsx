@@ -165,6 +165,10 @@ export default function PropertiesList() {
                       <th className="p-3 text-start">
                         {t("numUnits") || "عدد الوحدات"}
                       </th>
+                      
+                      <th className="p-3 text-start">
+                        {t("city") || "المدينة"}
+                      </th>
                       <th className="p-3 text-start">
                         {t("nationalAddress") || "العنوان الوطني"}
                       </th>
@@ -185,6 +189,7 @@ export default function PropertiesList() {
                         <td className="p-3">{p.property_type || "—"}</td>
                         <td className="p-3">{p.property_usage || "—"}</td>
                         <td className="p-3">{p.num_units || 0}</td>
+                        <td className="p-3">{p.city || "—"}</td>
                         <td className="p-3 flex items-center gap-1 text-gray-600">
                           <MapPin size={14} className="text-gray-400" />
                           {p.national_address || "—"}

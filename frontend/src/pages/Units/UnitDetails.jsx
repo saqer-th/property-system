@@ -168,20 +168,20 @@ export default function UnitDetails() {
                         <td className="p-2">{c.contract_no || "—"}</td>
                         <td className="p-2">{c.tenant_name || "—"}</td>
                         <td className="p-2">
-                          {c.start_date ? c.start_date.split("T")[0] : "—"}
+                          {c.tenancy_start ? c.tenancy_start.split("T")[0] : "—"}
                         </td>
                         <td className="p-2">
-                          {c.end_date ? c.end_date.split("T")[0] : "—"}
+                          {c.tenancy_end ? c.tenancy_end.split("T")[0] : "—"}
                         </td>
                         <td className="p-2">
                           <span
                             className={`px-2 py-1 text-xs rounded-full font-medium ${
-                              c.status === "active" || c.status === "نشط"
+                              c.contract_status === "active" || c.contract_status === "نشط"
                                 ? "text-emerald-600 bg-emerald-50"
                                 : "text-gray-600 bg-gray-100"
                             }`}
                           >
-                            {c.status === "active" || c.status === "نشط"
+                            {c.contract_status === "active" || c.contract_status === "نشط"
                               ? t("active")
                               : t("expired")}
                           </span>

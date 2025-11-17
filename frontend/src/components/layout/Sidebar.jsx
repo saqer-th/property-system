@@ -15,6 +15,7 @@ import {
   Bell,
   MessageCircle,
   Clock,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -25,11 +26,13 @@ export default function Sidebar() {
   const location = useLocation();
   const { user } = useAuth();
 
-  // ✅ لتحديد العنصر النشط في القائمة
+  // Active state helper
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(`${path}/`);
 
-  // 📋 القوائم العامة (لكل المستخدمين)
+  // -----------------------------
+  // 1️⃣ القائمة العامة
+  // -----------------------------
   const generalMenu = [
     { icon: <Home size={18} />, label: t("menu_dashboard") || "لوحة التحكم", path: "/dashboard" },
     { icon: <FileText size={18} />, label: t("menu_contracts") || "العقود", path: "/contracts" },
@@ -39,8 +42,11 @@ export default function Sidebar() {
     { icon: <Wrench size={18} />, label: t("menu_expenses") || "المصروفات", path: "/expenses" },
   ];
 
-  // 🏢 قائمة المكاتب
+  // -----------------------------
+  // 2️⃣ المكتب (Office)
+  // -----------------------------
   const officeId = user?.office_id || user?.id || 0;
+
   const officeMenu = [
     {
       icon: <Briefcase size={18} />,
@@ -49,33 +55,48 @@ export default function Sidebar() {
     },
   ];
 
-
-
-  // 🔔 قسم التذكيرات — متاح للمكتب والمشرف
+  // 🔔 التذكيرات
   if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
     officeMenu.push(
       { divider: true },
-
       {
         icon: <Clock size={18} />,
         label: t("menu_reminders") || "التذكيرات",
         path: "/office/reminders/log",
       }
-
     );
   }
 
-  // 🛡️ قائمة الأدمن
+  // -----------------------------
+  // 3️⃣ قسم التقارير (جديد)
+  // -----------------------------
+  const reportMenu = [];
+
+  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
+    reportMenu.push(
+      { divider: true },
+      {
+        icon: <FileSpreadsheet size={18} />,
+        label: t("menu_reports") || "التقارير",
+        path: "/reports",
+      }
+    );
+  }
+
+  // -----------------------------
+  // 4️⃣ الأدمن
+  // -----------------------------
   const adminMenu = [
     {
       icon: <Shield size={18} />,
       label: t("menu_admin_dashboard") || "لوحة الأدمن",
       path: "/admin/dashboard",
     },
-    
   ];
 
-  // ⚙️ الإعدادات العامة
+  // -----------------------------
+  // 5️⃣ الإعدادات
+  // -----------------------------
   const settingsMenu = [
     {
       icon: <Settings size={18} />,
@@ -84,60 +105,55 @@ export default function Sidebar() {
     },
   ];
 
-  // 🧱 بناء القائمة النهائية
+  // -----------------------------
+  // بناء القائمة النهائية
+  // -----------------------------
   let finalMenu = [...generalMenu];
 
-  // 📦 إضافة قائمة المكتب
   if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
     finalMenu.push({ divider: true }, ...officeMenu);
   }
 
-  // 📦 إضافة قائمة الأدمن
+  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
+    finalMenu.push(...reportMenu);
+  }
+
   if (user?.activeRole === "admin") {
     finalMenu.push({ divider: true }, ...adminMenu);
   }
 
-  // ⚙️ إضافة الإعدادات
   finalMenu.push({ divider: true }, ...settingsMenu);
 
+  // -----------------------------
+  // Render
+  // -----------------------------
   return (
     <aside className="h-screen w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col">
-      {/* 🏠 العنوان */}
       <div className="text-center py-5 text-xl font-bold text-primary border-b border-sidebar-border">
         🏠 Property System
       </div>
 
-      {/* 📋 القوائم */}
       <nav className="flex-1 px-4 py-3 space-y-1 overflow-y-auto">
-        {finalMenu.map((item, idx) => {
-          if (item.divider) {
-            return (
-              <div
-                key={`divider-${idx}`}
-                className="my-3 border-t border-sidebar-border opacity-60"
-              />
-            );
-          }
-
-          const active = isActive(item.path);
-          return (
+        {finalMenu.map((item, idx) =>
+          item.divider ? (
+            <div key={`divider-${idx}`} className="my-3 border-t border-sidebar-border opacity-60" />
+          ) : (
             <Link
               key={idx}
               to={item.path}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-all duration-200 ${
-                active
+                isActive(item.path)
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-primary"
               }`}
             >
-              <span className="flex items-center">{item.icon}</span>
+              {item.icon}
               <span>{item.label}</span>
             </Link>
-          );
-        })}
+          )
+        )}
       </nav>
 
-      {/* ⚙️ التذييل */}
       <div className="p-4 text-xs text-center text-gray-400 border-t border-sidebar-border">
         © {new Date().getFullYear()} Property System
       </div>

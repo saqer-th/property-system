@@ -29,6 +29,7 @@ export default function ContractDetails() {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editSection, setEditSection] = useState(null);
+  const [error, setError] = useState(null);
 
   // 🔒 صلاحيات
   const canEdit = user?.activeRole === "office_admin" ||user?.activeRole === "admin" ;
@@ -46,11 +47,32 @@ export default function ContractDetails() {
           "x-active-role": activeRole,
         },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      if (!res.ok) {
+        let message = "حدث خطأ أثناء جلب بيانات العقد.";
+
+        try {
+          const text = await res.text();
+
+          if (text && text.startsWith("{")) {
+            const data = JSON.parse(text);
+            message = data.message || message;
+          } else if (text) {
+            message = text;
+          }
+        } catch (err) {}
+
+        setError(message);
+        console.error("❌ fetchContract error:", message);
+        setLoading(false);
+        return;
+      }
+
       const json = await res.json();
       setContract(json?.data || json);
     } catch (err) {
       console.error("❌ Error loading contract:", err);
+      setError(err.message || "حدث خطأ غير متوقع");
     } finally {
       setLoading(false);
     }
@@ -201,8 +223,8 @@ export default function ContractDetails() {
           data={[
             { label: t("contractNo"), value: contract.contract_no },
             { label: t("titleDeed"), value: contract.property?.title_deed_no },
-            { label: t("startDate"), value: formatDate(contract.start_date) },
-            { label: t("endDate"), value: formatDate(contract.end_date) },
+            { label: t("startDate"), value: formatDate(contract.tenancy_start) },
+            { label: t("endDate"), value: formatDate(contract.tenancy_end) },
             { label: t("annualRent"), value: `${formatCurrency(rent)} SAR` },
             { label: t("status"), value: status },
           ]}
@@ -253,6 +275,7 @@ export default function ContractDetails() {
             { label: t("propertyUsage"), value: contract.property?.usage },
             { label: t("numUnits"), value: contract.property?.num_units },
             { label: t("nationalAddress"), value: contract.property?.national_address },
+            { label: t("city"), value: contract.property?.city },
           ]}
           onEdit={() => handleEdit("property")}
           canEdit={canEdit}

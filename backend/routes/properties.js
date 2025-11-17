@@ -20,7 +20,7 @@ router.get("/my", verifyToken, async (req, res) => {
       query = `
         SELECT 
           p.id, p.title_deed_no, p.property_type, p.property_usage,
-          p.num_units, p.national_address, p.property_name, p.contract_id,
+          p.num_units, p.national_address, p.city, p.contract_id,
           o.name AS office_name
         FROM properties p
         LEFT JOIN offices o ON o.id = p.office_id
@@ -31,19 +31,17 @@ router.get("/my", verifyToken, async (req, res) => {
     /* 🏢 المكتب يشاهد فقط العقارات التابعة لمكتبه */
     else if (["office", "office_admin"].includes(activeRole)) {
       query = `
-    SELECT DISTINCT ON (p.id)
+    SELECT 
       p.id, p.title_deed_no, p.property_type, p.property_usage,
-      p.num_units, p.national_address, p.property_name,
+      p.num_units, p.national_address, p.city, p.contract_id,
       o.name AS office_name
     FROM properties p
-    LEFT JOIN contracts c ON c.property_id = p.id
-    LEFT JOIN offices o ON o.id = c.office_id
-    WHERE 
-      c.office_id IN (
+    JOIN offices o ON o.id = p.office_id
+    WHERE p.office_id IN (
         SELECT office_id FROM office_users WHERE user_id = $1
-      )
-      OR o.owner_id = $1
-    ORDER BY p.id DESC;
+    )
+    OR o.owner_id = $1
+    ORDER BY p.id DESC
   `;
       params = [userId];
     }
@@ -53,7 +51,7 @@ router.get("/my", verifyToken, async (req, res) => {
       query = `
         SELECT DISTINCT 
           p.id, p.title_deed_no, p.property_type, p.property_usage,
-          p.num_units, p.national_address, p.property_name, p.contract_id,
+          p.num_units, p.national_address, p.city, p.contract_id,
           o.name AS office_name
         FROM properties p
         JOIN contracts c ON c.property_id = p.id
@@ -72,7 +70,7 @@ router.get("/my", verifyToken, async (req, res) => {
       query = `
         SELECT DISTINCT 
           p.id, p.title_deed_no, p.property_type, p.property_usage,
-          p.num_units, p.national_address, p.property_name, p.contract_id,
+          p.num_units, p.national_address, p.city, p.contract_id,
           o.name AS office_name
         FROM properties p
         JOIN contracts c ON c.property_id = p.id
@@ -112,87 +110,94 @@ router.get("/my", verifyToken, async (req, res) => {
    🏗️ 2️⃣ جلب تفاصيل العقار مع الوحدات والعقود التابعة له
    ========================================================= */
 router.get("/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
+  const { id: propertyId } = req.params;
   const { activeRole, id: userId, phone } = req.user;
   const client = await pool.connect();
 
   try {
-    // ✅ جلب بيانات العقار
+    // =========================================================
+    // 🏡 1️⃣ جلب بيانات العقار
+    // =========================================================
     const propertyRes = await client.query(
       `
       SELECT 
-        p.id, p.title_deed_no, p.property_type, p.property_usage,
-        p.num_units, p.national_address, p.property_name
+        p.id,
+        p.title_deed_no,
+        p.property_type AS property_name,
+        p.property_usage AS usage,
+        p.num_units,
+        p.national_address,
+        p.city,
+        p.office_id
       FROM properties p
-      WHERE p.id = $1;
+      WHERE p.id = $1
       `,
-      [id]
+      [propertyId]
     );
 
-    if (propertyRes.rows.length === 0) {
+    if (!propertyRes.rowCount) {
       return res.status(404).json({
         success: false,
         message: "❌ لم يتم العثور على العقار المطلوب.",
       });
     }
 
+    // =========================================================
+    // 🔐 2️⃣ التحقق من صلاحيات عرض العقار
+    // =========================================================
     let allowed = false;
 
-    // ✅ الأدمن يشوف كل شيء
     if (activeRole === "admin") {
       allowed = true;
-    }
-
-    // ✅ المكتب يشوف فقط العقارات اللي فيها عقد تابع له
+    } 
     else if (["office", "office_admin"].includes(activeRole)) {
       const check = await client.query(
-         `
+        `
     SELECT 1
-    FROM contracts c
-    WHERE c.property_id = $1 
-    AND (
-      c.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
-      OR c.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
-    )
-    LIMIT 1;
-    `,
-        [id, userId]
+    FROM properties p
+    JOIN offices o ON o.id = p.office_id
+    WHERE p.id = $1
+      AND (
+        p.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
+        OR o.owner_id = $2
+      )
+    LIMIT 1
+        `,
+        [propertyId, userId]
       );
       allowed = check.rowCount > 0;
     }
-
-    // ✅ المالك يشوف فقط العقارات اللي له فيها عقد كمؤجر
-    else if (["owner", "مالك"].includes(activeRole)) {
+    else if (["owner","مالك"].includes(activeRole)) {
       const check = await client.query(
         `
         SELECT 1
         FROM contracts c
         JOIN contract_parties cp ON cp.contract_id = c.id
-        JOIN parties p ON p.id = cp.party_id
+        JOIN parties pt ON pt.id = cp.party_id
         WHERE c.property_id = $1
           AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        LIMIT 1;
+          AND REPLACE(REPLACE(pt.phone,'+966','0'),' ','') =
+              REPLACE(REPLACE($2,'+966','0'),' ','')
+        LIMIT 1
         `,
-        [id, phone]
+        [propertyId, phone]
       );
       allowed = check.rowCount > 0;
     }
-
-    // ✅ المستأجر يشوف فقط العقارات اللي له فيها عقد كمستأجر
-    else if (["tenant", "مستأجر"].includes(activeRole)) {
+    else if (["tenant","مستأجر"].includes(activeRole)) {
       const check = await client.query(
         `
         SELECT 1
         FROM contracts c
         JOIN contract_parties cp ON cp.contract_id = c.id
-        JOIN parties p ON p.id = cp.party_id
+        JOIN parties pt ON pt.id = cp.party_id
         WHERE c.property_id = $1
           AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        LIMIT 1;
+          AND REPLACE(REPLACE(pt.phone,'+966','0'),' ','') =
+              REPLACE(REPLACE($2,'+966','0'),' ','')
+        LIMIT 1
         `,
-        [id, phone]
+        [propertyId, phone]
       );
       allowed = check.rowCount > 0;
     }
@@ -205,131 +210,103 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 
     // =========================================================
-    // 🏢 الوحدات المرتبطة بالعقود التابعة فقط للمكتب أو المستخدم
+    // 🧱 3️⃣ جلب الوحدات المرتبطة بالعقار (نشطة + منتهية + شاغرة)
     // =========================================================
-    let unitsQuery = `
-  SELECT 
-    u.id, u.unit_no, u.unit_type, u.unit_area,
-    u.electric_meter_no, u.water_meter_no, u.status
-  FROM units u
-  JOIN contracts c ON c.id = u.contract_id
-  WHERE c.property_id = $1
-    `;
-
-    const params = [id];
-
-    // فقط الوحدات التابعة لعقود المكتب
-    if (["office", "office_admin"].includes(activeRole)) {
-      unitsQuery += `
-    AND c.office_id IN (
-      SELECT id FROM offices WHERE owner_id = $2
-      UNION
-      SELECT office_id FROM office_users WHERE user_id = $2
-    )
-  `;
-      params.push(userId);
-    }
-
-    // فقط الوحدات التابعة لعقود المالك أو المستأجر
-    else if (["owner", "مالك"].includes(activeRole)) {
-      unitsQuery += `
-        AND c.id IN (
-          SELECT cp.contract_id
-          FROM contract_parties cp
-          JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        )
-      `;
-      params.push(phone);
-    } else if (["tenant", "مستأجر"].includes(activeRole)) {
-      unitsQuery += `
-        AND c.id IN (
-          SELECT cp.contract_id
-          FROM contract_parties cp
-          JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        )
-      `;
-      params.push(phone);
-    }
-
-    unitsQuery += " ORDER BY u.unit_no;";
-    const unitsRes = await client.query(unitsQuery, params);
-
-    // =========================================================
-    // 📜 العقود التابعة للعقار (حسب الصلاحية)
-    // =========================================================
-    let contractsQuery = `
+    const unitsRes = await client.query(
+      `
       SELECT 
-        c.id, c.contract_no, c.tenancy_start, c.tenancy_end, c.annual_rent,
-        o.name AS office_name,
-        (SELECT name FROM parties pt
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر') LIMIT 1) AS tenant_name,
-        (SELECT phone FROM parties pt
-         JOIN contract_parties cp ON cp.party_id = pt.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر') LIMIT 1) AS tenant_phone,
-        (SELECT name FROM parties pl
-         JOIN contract_parties cp ON cp.party_id = pl.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('lessor','مالك') LIMIT 1) AS lessor_name,
-        (SELECT phone FROM parties pl
-         JOIN contract_parties cp ON cp.party_id = pl.id
-         WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('lessor','مالك') LIMIT 1) AS lessor_phone,
+        u.id AS unit_id,
+        u.unit_no,
+        u.unit_type,
+        u.unit_area,
+        u.electric_meter_no,
+        u.water_meter_no,
+        c.id AS contract_id,
+        c.tenancy_start,
+        c.tenancy_end,
         CASE 
-          WHEN c.tenancy_end IS NULL THEN 'نشط'
+          WHEN c.id IS NULL THEN 'vacant'
+          WHEN CURRENT_DATE BETWEEN c.tenancy_start AND c.tenancy_end THEN 'occupied'
+          ELSE 'expired'
+        END AS status
+      FROM units u
+      LEFT JOIN LATERAL (
+          SELECT c.*
+          FROM contract_units cu
+          JOIN contracts c ON c.id = cu.contract_id
+          WHERE cu.unit_id = u.id
+          ORDER BY c.tenancy_start DESC
+          LIMIT 1
+      ) c ON TRUE
+      WHERE u.property_id = $1
+      ORDER BY u.unit_no::int NULLS LAST
+
+      `,
+      [propertyId]
+    );
+
+    // =========================================================
+    // 🧾 4️⃣ جلب العقود المرتبطة بالعقار
+    // =========================================================
+    const contractsRes = await client.query(
+      `
+      SELECT 
+        c.id,
+        c.contract_no,
+        c.tenancy_start,
+        c.tenancy_end,
+        c.annual_rent,
+        o.name AS office_name,
+        (
+          SELECT pt.name
+          FROM parties pt
+          JOIN contract_parties cp ON cp.party_id = pt.id
+          WHERE cp.contract_id = c.id
+            AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+          LIMIT 1
+        ) AS tenant_name,
+        (
+          SELECT pt.phone
+          FROM parties pt
+          JOIN contract_parties cp ON cp.party_id = pt.id
+          WHERE cp.contract_id = c.id
+            AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+          LIMIT 1
+        ) AS tenant_phone,
+        (
+          SELECT pt.name
+          FROM parties pt
+          JOIN contract_parties cp ON cp.party_id = pt.id
+          WHERE cp.contract_id = c.id
+            AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+          LIMIT 1
+        ) AS lessor_name,
+        (
+          SELECT pt.phone
+          FROM parties pt
+          JOIN contract_parties cp ON cp.party_id = pt.id
+          WHERE cp.contract_id = c.id
+            AND LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+          LIMIT 1
+        ) AS lessor_phone,
+        CASE 
           WHEN c.tenancy_end >= CURRENT_DATE THEN 'نشط'
           ELSE 'منتهي'
         END AS contract_status
       FROM contracts c
       LEFT JOIN offices o ON o.id = c.office_id
       WHERE c.property_id = $1
-    `;
-
-    const contractParams = [id];
-
-    if (["office", "office_admin"].includes(activeRole)) {
-      contractsQuery += `
-    AND (
-      c.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
-      OR c.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
-    )
-  `;
-      contractParams.push(userId);
-    } else if (["owner", "مالك"].includes(activeRole)) {
-      contractsQuery += `
-        AND c.id IN (
-          SELECT cp.contract_id
-          FROM contract_parties cp
-          JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        )
-      `;
-      contractParams.push(phone);
-    } else if (["tenant", "مستأجر"].includes(activeRole)) {
-      contractsQuery += `
-        AND c.id IN (
-          SELECT cp.contract_id
-          FROM contract_parties cp
-          JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
-          AND REPLACE(REPLACE(p.phone,'+966','0'),' ','') = REPLACE(REPLACE($2,'+966','0'),' ','')
-        )
-      `;
-      contractParams.push(phone);
-    }
-
-    contractsQuery += " ORDER BY c.tenancy_start DESC;";
-    const contractsRes = await client.query(contractsQuery, contractParams);
+      ORDER BY c.tenancy_start DESC
+      `,
+      [propertyId]
+    );
 
     // =========================================================
-    // ✅ الإرجاع النهائي
+    // 🎯 5️⃣ النتيجة النهائية
     // =========================================================
     res.json({
       success: true,
-      message: "✅ تم جلب تفاصيل العقار بنجاح.",
+      message: "تم جلب بيانات العقار بنجاح",
       data: {
         ...propertyRes.rows[0],
         units: unitsRes.rows,
@@ -348,12 +325,22 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-/* =========================================================
- 🏢 تحديث بيانات العقار
-========================================================= */
+
+
+
+// ===========================
+//  🏡 تحديث العقار
+// ===========================
 router.put("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const { title_deed_no, property_type, property_usage, num_units, national_address } = req.body;
+  const {
+    title_deed_no,
+    property_name,
+    usage,
+    num_units,
+    city,
+    national_address
+  } = req.body;
 
   try {
     const query = `
@@ -364,19 +351,34 @@ router.put("/:id", verifyToken, async (req, res) => {
         property_usage = $3,
         num_units = $4,
         national_address = $5,
+        city = $6,
         updated_at = NOW()
-      WHERE id = $6
+      WHERE id = $7
       RETURNING *;
     `;
-    const values = [title_deed_no, property_type, property_usage, num_units, national_address, id];
+
+    const values = [
+      title_deed_no,
+      property_name,
+      usage,
+      num_units,
+      national_address,
+      city,
+      id,
+    ];
+
     const { rows } = await pool.query(query, values);
 
-    if (!rows.length)
-      return res.status(404).json({ success: false, message: "لم يتم العثور على العقار" });
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ لم يتم العثور على العقار المطلوب.",
+      });
+    }
 
     res.json({
       success: true,
-      message: "✅ تم تحديث بيانات العقار بنجاح",
+      message: "✅ تم تحديث العقار بنجاح.",
       data: rows[0],
     });
   } catch (err) {
@@ -388,6 +390,200 @@ router.put("/:id", verifyToken, async (req, res) => {
     });
   }
 });
+// ============================================
+// 📌 Property Full Summary (for reports)
+// GET /properties/:id/summary
+// ============================================
+router.get("/:id/summary", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
 
+  try {
+    /* 1) Property Info */
+    const propertyRes = await client.query(
+      `SELECT * FROM properties WHERE id = $1`,
+      [id]
+    );
+
+    if (propertyRes.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ Property not found",
+      });
+    }
+
+    const property = propertyRes.rows[0];
+
+    /* 2) Units */
+    const unitsRes = await client.query(
+      `SELECT id, unit_no, unit_type, unit_area, electric_meter_no, water_meter_no 
+       FROM units WHERE property_id = $1 
+       ORDER BY unit_no::int`,
+      [id]
+    );
+
+    /* 3) Contracts */
+/* 3) Contracts */
+    const contractsRes = await client.query(
+      `
+SELECT DISTINCT ON (c.id)
+    c.id,
+    c.contract_no,
+    c.tenancy_start,
+    c.tenancy_end,
+    c.total_contract_value,
+    c.annual_rent,
+
+    CASE 
+      WHEN c.tenancy_end >= NOW() THEN 'نشط'
+      ELSE 'منتهي'
+    END AS status,
+
+    -- tenant only
+    (
+      SELECT pt.name 
+      FROM contract_parties cp2
+      JOIN parties pt ON pt.id = cp2.party_id
+      WHERE cp2.contract_id = c.id 
+        AND cp2.role IN ('tenant','مستأجر','مستاجر')
+      LIMIT 1
+    ) AS tenant_name
+
+FROM contracts c
+WHERE c.property_id = $1
+ORDER BY c.id, c.tenancy_start DESC;
+      `,
+      [id]
+    );
+
+
+    /* 4) Expenses */
+    const expensesRes = await client.query(
+      `SELECT id, amount, date, notes, expense_type
+       FROM expenses
+       WHERE property_id = $1 or contract_id IN (SELECT id FROM contracts WHERE property_id = $1)
+        or unit_id IN (SELECT id FROM units WHERE property_id = $1)
+       ORDER BY date DESC`,
+      [id]
+    );
+
+    /* 5) Receipts */
+    const receiptsRes = await client.query(
+      `SELECT id, receipt_type, amount, date
+       FROM receipts
+       WHERE contract_id IN (SELECT id FROM contracts WHERE property_id = $1)
+        or property_id = $1
+         or unit_id IN (SELECT id FROM units WHERE property_id = $1)
+       ORDER BY date DESC`,
+      [id]
+    );
+
+    /* ================================
+       BUILD FINAL RESPONSE
+    =================================*/
+    return res.json({
+      success: true,
+      message: "📊 Property Summary Loaded",
+      data: {
+        property,
+        units: unitsRes.rows,
+        contracts: contractsRes.rows,
+        expenses: expensesRes.rows,
+        receipts: receiptsRes.rows,
+      },
+    });
+
+  } catch (err) {
+    console.error("❌ Error in /properties/:id/summary:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error loading property summary",
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+// ============================================
+// 📌 Get All Contracts for a Property (with units)
+// GET /properties/:id/contracts
+// ============================================
+
+router.get("/:id/contracts", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    // التحقق من وجود العقار
+    const checkProperty = await client.query(
+      `SELECT id FROM properties WHERE id = $1`,
+      [id]
+    );
+
+    if (checkProperty.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "❌ Property not found",
+      });
+    }
+
+    // جلب العقود مع الوحدة
+    const contracts = await client.query(
+      `
+      SELECT DISTINCT ON (c.id)
+        c.id,
+        c.contract_no,
+        c.tenancy_start,
+        c.tenancy_end,
+        c.total_contract_value,
+        c.annual_rent,
+
+        CASE 
+          WHEN c.tenancy_end >= NOW() THEN 'نشط'
+          ELSE 'منتهي'
+        END AS status,
+
+        -- المستأجر فقط
+        (
+          SELECT pt.name
+          FROM contract_parties cp2
+          JOIN parties pt ON pt.id = cp2.party_id
+          WHERE cp2.contract_id = c.id 
+            AND cp2.role IN ('tenant','مستأجر','مستاجر')
+          LIMIT 1
+        ) AS tenant_name,
+
+        -- 🔥 الوحدة المرتبطة بالعقد
+        u.id AS unit_id,
+        u.unit_no,
+        u.unit_type,
+        u.unit_area
+
+      FROM contracts c
+      LEFT JOIN contract_units cu ON cu.contract_id = c.id
+      LEFT JOIN units u ON u.id = cu.unit_id
+
+      WHERE c.property_id = $1
+      ORDER BY c.id, c.tenancy_start DESC;
+      `,
+      [id]
+    );
+
+    return res.json({
+      success: true,
+      data: contracts.rows,
+    });
+
+  } catch (err) {
+    console.error("❌ Error loading property contracts:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error loading property contracts",
+    });
+  } finally {
+    client.release();
+  }
+});
 
 export default router;
