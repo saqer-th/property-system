@@ -1,169 +1,107 @@
-import venom from "venom-bot";
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState
+} from "@whiskeysockets/baileys";
+import qrcodeTerminal from "qrcode-terminal";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-/* =========================================================
-   🧭 إعداد المسارات
-========================================================= */
+/* ============================================
+   🔧 بناء المسار الصحيح للجلسة
+============================================ */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 📁 المسار الثابت لمجلد الجلسة داخل backend
-const backendDir = path.resolve(__dirname, "..");
-const sessionDir = path.join(backendDir, "session");
+// الجلسة ستكون هنا:
+// backend/session-baileys
+const sessionDir = path.join(__dirname, "session-baileys");
 
-// 🧹 إزالة أي ملفات جلسة قديمة تسبب تعارض
-const legacyFile = path.join(backendDir, "property-system-session.data.json");
-if (fs.existsSync(legacyFile)) {
-  fs.unlinkSync(legacyFile);
-  console.log("🧹 Removed legacy session file:", legacyFile);
+if (!fs.existsSync(sessionDir)) {
+  fs.mkdirSync(sessionDir, { recursive: true });
 }
 
-// تأكد من وجود المجلد
-if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
-
-let client = null;
-let isInitializing = false;
+let sock = null;
 let connectionState = "DISCONNECTED";
+let isInitializing = false;
 
-/* =========================================================
-   🚀 إنشاء عميل واتساب متكامل (Venom)
-========================================================= */
+/* ============================================
+   🚀 تشغيل Baileys
+============================================ */
 export async function initWhatsAppClient() {
-  if (client || isInitializing) return client;
+  if (sock || isInitializing) return sock;
   isInitializing = true;
 
-  console.log("🚀 Initializing WhatsApp client (Venom)...");
+  console.log("🚀 Starting Baileys...");
 
-  try {
-    client = await venom.create({
-      session: "property-system-session",
-      multidevice: true,
-      headless: true,
-      folderNameToken: "session",
-      disableSpins: true,
-      logQR: true,
-      mkdirFolderToken: sessionDir,
-      browserArgs: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-extensions",
-        "--disable-gpu",
-        "--no-zygote",
-      ],
-    });
+  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
-    /* =========================================================
-       🔄 مراقبة تغييرات الحالة
-    ========================================================= */
-    client.onStateChange((state) => {
-      console.log("🔄 WhatsApp state:", state);
+  sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    browser: ["SaqrON", "Chrome", "1.0.0"],
+  });
 
-      if (["CONNECTED", "SYNCING", "OPENING"].includes(state)) {
-        connectionState = "CONNECTED";
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    if (connection === "open") {
+      console.log("✅ WhatsApp connected");
+      connectionState = "CONNECTED";
+    }
+
+    if (connection === "close") {
+      const reason =
+        lastDisconnect?.error?.output?.statusCode ||
+        lastDisconnect?.error?.output?.payload?.statusCode;
+
+      console.log("⚠️ WhatsApp disconnected:", reason);
+
+      if (reason === DisconnectReason.loggedOut) {
+        console.log("❌ Logged out — removing session...");
+        fs.rmSync(sessionDir, { recursive: true, force: true });
       } else {
-        connectionState = state;
+        console.log("🔄 Reconnecting...");
+        initWhatsAppClient();
       }
-    });
+      connectionState = "DISCONNECTED";
+    }
+  });
 
-    /* =========================================================
-       📨 أول رسالة واردة = الجلسة مستقرة
-    ========================================================= */
-    client.onMessage(() => {
-      if (connectionState !== "CONNECTED") {
-        console.log("✅ WhatsApp is now active — session stable!");
-        connectionState = "CONNECTED";
-      }
-    });
-
-    console.log("💾 Venom WhatsApp session ready");
-    isInitializing = false;
-    return client;
-
-  } catch (err) {
-    console.error("❌ WhatsApp init error:", err.message);
-    client = null;
-    connectionState = "DISCONNECTED";
-    isInitializing = false;
-    throw err;
-  }
+  isInitializing = false;
+  return sock;
 }
 
-/* =========================================================
-   💬 إرسال رسالة واتساب
-========================================================= */
+/* ============================================
+   💬 إرسال رسالة
+============================================ */
 function formatPhone(phone) {
-  if (!phone) return null;
-  let p = phone.toString().replace(/\D/g, "");
-  if (p.startsWith("00")) p = p.slice(2);
-  if (p.startsWith("0")) p = "966" + p.slice(1);
-  if (!p.startsWith("966")) p = "966" + p;
-  return `${p}@c.us`;
+  phone = phone.toString().replace(/\D/g, "");
+  if (phone.startsWith("00")) phone = phone.slice(2);
+  if (phone.startsWith("0")) phone = "966" + phone.slice(1);
+  if (!phone.startsWith("966")) phone = "966" + phone;
+  return `${phone}@s.whatsapp.net`;
 }
 
 export async function sendWhatsAppMessage(phone, message) {
   try {
-    if (!client) await initWhatsAppClient();
-    if (connectionState !== "CONNECTED") {
-      console.log(`⚠️ WhatsApp not connected (state: ${connectionState})`);
-      await new Promise((r) => setTimeout(r, 3000));
-    }
+    if (!sock) await initWhatsAppClient();
 
-    const target = phone.includes("@c.us") ? phone : formatPhone(phone);
+    const jid = formatPhone(phone);
+    await sock.sendMessage(jid, { text: message });
 
-    await client.sendText(target, message);
-
-    console.log(`✅ WhatsApp message sent to ${target}`);
-    return { success: true, target };
+    console.log(`📨 Message sent to ${jid}`);
+    return { success: true };
 
   } catch (err) {
-    console.error("❌ WhatsApp send error:", err.message);
-    return { success: false, error: err.message };
+    console.error("❌ Baileys send error:", err.message);
+    return { success: false };
   }
 }
 
-/* =========================================================
+/* ============================================
    📊 حالة الاتصال
-========================================================= */
+============================================ */
 export function getConnectionState() {
   return connectionState;
 }
-
-export async function getWhatsAppClient() {
-  if (!client) await initWhatsAppClient();
-  return client;
-}
-
-/* =========================================================
-   🧹 إغلاق الجلسة بشكل آمن
-========================================================= */
-export async function closeWhatsApp() {
-  if (client) {
-    try {
-      await client.close();
-      console.log("🧹 WhatsApp session closed");
-    } catch (err) {
-      console.error("⚠️ Error closing WhatsApp:", err.message);
-    }
-  }
-  client = null;
-  connectionState = "DISCONNECTED";
-  isInitializing = false;
-}
-
-/* =========================================================
-   🧩 إغلاق التطبيق بالكامل عند الخروج
-========================================================= */
-process.on("SIGINT", async () => {
-  console.log("\n🛑 Shutting down gracefully...");
-  await closeWhatsApp();
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
-  console.log("\n🛑 Received SIGTERM...");
-  await closeWhatsApp();
-  process.exit(0);
-});
