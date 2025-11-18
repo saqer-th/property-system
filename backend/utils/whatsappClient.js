@@ -1,10 +1,13 @@
-import wa from "@open-wa/wa-automate";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import qrcode from "qrcode-terminal";
+import pkg from "whatsapp-web.js";   // <-- الحل
+
+const { Client, LocalAuth } = pkg;  // <-- استخراج الكلاسات
 
 /* =========================================================
-   📌 إعداد المسارات
+   📂 إعداد المسارات
 ========================================================= */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,118 +15,100 @@ const __dirname = path.dirname(__filename);
 const backendDir = path.resolve(__dirname, "..");
 const sessionDir = path.join(backendDir, "session");
 
-// حذف ملف جلسة قديم
-const legacyFile = path.join(backendDir, "property-system-session.data.json");
-if (fs.existsSync(legacyFile)) {
-  fs.unlinkSync(legacyFile);
-  console.log("🧹 Removed legacy session file:", legacyFile);
+if (!fs.existsSync(sessionDir)) {
+  fs.mkdirSync(sessionDir, { recursive: true });
 }
-
-// إنشاء مجلد الجلسة إذا لم يكن موجود
-if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
 let client = null;
 let isInitializing = false;
 let connectionState = "DISCONNECTED";
 
 /* =========================================================
-   🚀 تشغيل Open-WA في Legacy Mode (Non-MD)
+   🚀 تشغيل WhatsApp-Web.js (NO-STORE MODE)
 ========================================================= */
 export async function initWhatsAppClient() {
   if (client || isInitializing) return client;
   isInitializing = true;
 
-  console.log("🚀 Initializing WhatsApp (LEGACY MODE)...");
+  console.log("🚀 Initializing WhatsApp-Web.js (NO-STORE MODE)...");
 
   try {
-    const executablePaths = [
-      "/usr/bin/chromium",
+    const browserPaths = [
+      "/usr/bin/google-chrome-stable",
       "/usr/bin/chromium-browser",
-      "/usr/bin/google-chrome-stable"
+      "/usr/bin/chromium"
     ];
 
-    let executablePath = executablePaths.find((p) => fs.existsSync(p));
-    if (!executablePath) {
-      executablePath = "/usr/bin/chromium-browser"; // fallback
-    }
+    let executablePath = browserPaths.find((p) => fs.existsSync(p)) || undefined;
 
-    console.log("🧭 Browser:", executablePath);
-    console.log("💾 Session Directory:", sessionDir);
+    client = new Client({
+      authStrategy: new LocalAuth({
+        clientId: "property-system-session",
+        dataPath: sessionDir
+      }),
 
-    const config = {
-      sessionId: "property-system-session",
+      puppeteer: {
+        headless: false,
+        executablePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-extensions",
+          "--disable-gpu",
+          "--no-zygote"
+        ]
+      },
 
-      /* 👑 أهم شيء هنا */
-      multiDevice: false,              // 🔥 يعطّل MD Mode تماماً
-      legacy: true,                    // 🔥 يشغّل WhatsApp Web القديم
-      skipBrokenMethodsCheck: true,    // 🔥 يوقف فحص دوال WAPI
+      takeoverOnConflict: false,
+      takeoverTimeoutMs: 0,
 
-      headless: true,                  // يخلي المتصفح مخفي
-      useChrome: true,
-      executablePath,
-      dataPath: sessionDir,
-      userDataDir: sessionDir,
-      qrTimeout: 0,
-      authTimeout: 0,
-      safeMode: false,
-      disableSpins: true,
-      killProcessOnBrowserClose: false,
-
-      chromiumArgs: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-extensions",
-        "--disable-gpu",
-        "--no-zygote",
-        `--user-data-dir=${sessionDir}`,
-        "--user-agent='Mozilla/5.0 (Linux; Android 10; SM-G975F)'"
-      ],
-    };
-
-    client = await wa.create(config);
-
-    // مراقبة الحالة
-    client.onStateChanged((state) => {
-      console.log("🔄 WhatsApp state:", state);
-
-      if (state === "CONNECTED") connectionState = "CONNECTED";
-      else connectionState = state;
-    });
-
-    // تثبيت الجلسة
-    client.onAnyMessage(() => {
-      if (connectionState !== "CONNECTED") {
-        console.log("📶 Session stable!");
-        connectionState = "CONNECTED";
+      webVersionCache: {
+        type: "remote",
+        remotePath:
+          "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1014215569.html"
       }
     });
 
-    console.log("✅ LEGACY MODE READY");
+    /* ===== QR ===== */
+    client.on("qr", (qr) => {
+      console.log("\n📌 امسح هذا الـ QR:");
+      qrcode.generate(qr, { small: true });
+    });
+
+    client.on("ready", () => {
+      console.log("✅ WhatsApp Ready");
+      connectionState = "CONNECTED";
+    });
+
+    client.on("authenticated", () => console.log("🔑 Authenticated"));
+    client.on("auth_failure", (m) => console.log("❌ Auth failed:", m));
+    client.on("disconnected", (reason) => {
+      console.log("⚠️ Disconnected:", reason);
+      connectionState = "DISCONNECTED";
+    });
+
+    await client.initialize();
+
     isInitializing = false;
     return client;
 
   } catch (err) {
-    console.error("❌ WhatsApp init error:", err.message);
+    console.error("❌ init error:", err.message);
     client = null;
-    connectionState = "DISCONNECTED";
     isInitializing = false;
+    connectionState = "DISCONNECTED";
     throw err;
   }
 }
 
 /* =========================================================
-   💬 إرسال الرسائل — يدعم فتح محادثات جديدة
+   💬 إرسال رسالة
 ========================================================= */
 function formatPhone(phone) {
-  if (!phone) return null;
-
   phone = phone.toString().replace(/\D/g, "");
-
-  if (phone.startsWith("00")) phone = phone.slice(2);
   if (phone.startsWith("0")) phone = "966" + phone.slice(1);
   if (!phone.startsWith("966")) phone = "966" + phone;
-
   return `${phone}@c.us`;
 }
 
@@ -131,38 +116,14 @@ export async function sendWhatsAppMessage(phone, message) {
   try {
     if (!client) await initWhatsAppClient();
 
-    if (connectionState !== "CONNECTED") {
-      console.log("⏳ Waiting for WhatsApp connection...");
-      await new Promise((r) => setTimeout(r, 3000));
-    }
+    const target = formatPhone(phone);
 
-    const target = phone.includes("@c.us") ? phone : formatPhone(phone);
-
-    await client.sendText(target, message);
+    await client.sendMessage(target, message);
     console.log(`📩 Message sent to: ${target}`);
 
     return { success: true };
-
   } catch (err) {
     console.error("❌ Send error:", err.message);
     return { success: false, error: err.message };
   }
-}
-
-/* =========================================================
-   🧹 إغلاق الجلسة
-========================================================= */
-export async function closeWhatsApp() {
-  if (client) {
-    try {
-      await client.kill();
-      console.log("🧹 WhatsApp session closed");
-    } catch (err) {
-      console.error("⚠️ Error closing:", err.message);
-    }
-  }
-
-  client = null;
-  connectionState = "DISCONNECTED";
-  isInitializing = false;
 }
