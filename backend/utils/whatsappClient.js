@@ -72,7 +72,7 @@ export async function initWhatsAppClient() {
 
     /* ===== QR ===== */
     client.on("qr", (qr) => {
-      console.log("📸 QR Code received, scan please:");
+      console.log("\n📌 امسح هذا الـ QR:");
       qrcode.generate(qr, { small: true });
     });
 
