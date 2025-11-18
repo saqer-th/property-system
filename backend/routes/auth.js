@@ -31,11 +31,11 @@ router.post("/login-phone", async (req, res) => {
   phone = normalizePhone(phone);
 
   try {
-    // ✅ تحقق من وجود المستخدم
+    // * التحقق من وجود المستخدم
     let { rows } = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
     let user = rows[0];
 
-    // 🧩 إنشاء مستخدم جديد إذا غير موجود
+    // * إذا غير موجود → أنشئ مستخدم جديد
     if (!user) {
       const result = await pool.query(
         `INSERT INTO users (name, phone, created_at, is_active)
@@ -43,9 +43,10 @@ router.post("/login-phone", async (req, res) => {
          RETURNING *`,
         ["مستخدم جديد", phone]
       );
+
       user = result.rows[0];
 
-      // تعيين دور tenant افتراضيًا
+      // * إضافة دور tenant افتراضيًا
       const roleRes = await pool.query("SELECT id FROM roles WHERE role_name='tenant'");
       if (roleRes.rows.length) {
         await pool.query(
@@ -55,30 +56,35 @@ router.post("/login-phone", async (req, res) => {
       }
     }
 
-    // إنشاء كود OTP
+    // * إنشاء كود OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
     await pool.query("DELETE FROM user_otp WHERE phone=$1", [phone]);
     await pool.query(
       `INSERT INTO user_otp (phone, otp_code, expires_at)
        VALUES ($1,$2,NOW()+INTERVAL '5 minutes')`,
       [phone, otp]
     );
-    await sendWhatsAppMessage(
-  phone,
-  `مرحبًا 👋
-`
-      );
+
+    /* ========================================================
+       🔥 هنا المهم: إرسال صورة + OTP
+       ======================================================== */
+    await sendWhatsAppOTP(phone, otp);
+
+    // * الاستجابة
     res.json({
       success: true,
       message: "تم إرسال كود التحقق",
-      otp_demo: otp, // ⚠️ مؤقتًا أثناء التطوير
+      otp_demo: otp, // فقط أثناء التطوير
       data: { id: user.id, phone: user.phone, name: user.name },
     });
+
   } catch (err) {
     console.error("❌ login-phone error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 /* =========================================================
    🔐 2️⃣ Verify OTP and Login

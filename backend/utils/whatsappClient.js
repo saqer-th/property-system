@@ -150,6 +150,44 @@ export async function sendWhatsAppMessage(phone, message) {
     return { success: false, error: err.message };
   }
 }
+/* =========================================================
+   📸 إرسال صورة + OTP لتفعيل المحادثة
+   ========================================================= */
+export async function sendWhatsAppOTP(phone, otp) {
+  try {
+    if (!client) await initWhatsAppClient();
+
+    const target = phone.includes("@c.us") ? phone : formatPhone(phone);
+
+    // المسار الفعلي للصورة
+    const imagePath = path.join(backendDir, "assets", "system-logo.png");
+
+    // 1) إرسال الصورة أولًا (لفتح المحادثة)
+    await client.sendImage(
+      target,
+      imagePath,
+      "system-logo",
+      "مرحبًا 👋\nنرسل لك الآن رمز التحقق للدخول."
+    );
+
+    console.log("📸 Image sent to:", target);
+
+    // 2) انتظار بسيط لإتاحة الوقت لفتح الجلسة
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    // 3) إرسال كود OTP
+    await client.sendText(
+      target,
+      `رمز التحقق الخاص بك هو: *${otp}* 🔐\nصالح لمدة 5 دقائق.\n\nإذا لم تطلب هذا الرمز، تجاهل الرسالة.`
+    );
+
+    console.log("🔐 OTP sent to:", target);
+    return { success: true };
+  } catch (err) {
+    console.error("❌ WhatsApp OTP error:", err.message);
+    return { success: false, error: err.message };
+  }
+}
 
 /* =========================================================
    📊 حالة الاتصال
