@@ -25,17 +25,25 @@ router.post("/login-phone", async (req, res) => {
   const pool = req.pool;
   let { phone } = req.body;
 
-  if (!phone)
-    return res.status(400).json({ success: false, message: "رقم الجوال مطلوب" });
+  if (!phone) {
+    return res.status(400).json({
+      success: false,
+      message: "رقم الجوال مطلوب",
+    });
+  }
 
   phone = normalizePhone(phone);
 
   try {
-    // ✅ تحقق من وجود المستخدم
-    let { rows } = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+    // =====================================================
+    // 1) تحقق من وجود المستخدم أو إنشائه
+    // =====================================================
+    let { rows } = await pool.query(
+      "SELECT * FROM users WHERE phone = $1",
+      [phone]
+    );
     let user = rows[0];
 
-    // 🧩 إنشاء مستخدم جديد إذا غير موجود
     if (!user) {
       const result = await pool.query(
         `INSERT INTO users (name, phone, created_at, is_active)
@@ -45,8 +53,10 @@ router.post("/login-phone", async (req, res) => {
       );
       user = result.rows[0];
 
-      // تعيين دور tenant افتراضيًا
-      const roleRes = await pool.query("SELECT id FROM roles WHERE role_name='tenant'");
+      // تخصيص دور tenant
+      const roleRes = await pool.query(
+        "SELECT id FROM roles WHERE role_name='tenant'"
+      );
       if (roleRes.rows.length) {
         await pool.query(
           "INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2)",
@@ -55,39 +65,73 @@ router.post("/login-phone", async (req, res) => {
       }
     }
 
-    // إنشاء كود OTP
+    // =====================================================
+    // 2) إنشاء كود OTP والتخزين
+    // =====================================================
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
     await pool.query("DELETE FROM user_otp WHERE phone=$1", [phone]);
     await pool.query(
       `INSERT INTO user_otp (phone, otp_code, expires_at)
        VALUES ($1,$2,NOW()+INTERVAL '5 minutes')`,
       [phone, otp]
     );
-    await sendWhatsAppMessage(
-  phone,
-  `مرحبًا 👋
 
-نرحب بك في نظام إدارة الأملاك، ويسعدنا تسجيل دخولك معنا.
-لأمان حسابك، نرسل لك رمز التحقق الخاص بك.
+    // =====================================================
+    // 3) تهيئة رسالة الـ OTP
+    // =====================================================
+    const message = `
+مرحبًا 👋
 
-رمز التحقق هو: *${otp}* 🔐  
-صالح لمدة 5 دقائق فقط.
+نرحب بك في *نظام إدارة الأملاك*، ويسعدنا تسجيل دخولك معنا.
+
+🔐 *رمز التحقق الخاص بك هو:*  
+*${otp}*
+
+⏳ صالح لمدة *5 دقائق* فقط.
 
 إذا لم تقم بطلب هذا الرمز، يمكنك تجاهل الرسالة بأمان.
 
-شكراً لثقتك في منصتنا 🌟`
-      );
-    res.json({
+شكراً لثقتك في منصتنا 🌟
+`;
+
+    // =====================================================
+    // 4) إرسال الرسالة عبر Venom
+    // =====================================================
+    const result = await sendWhatsAppMessage(phone, message);
+
+    if (!result || result?.success === false) {
+      console.log("⚠️ WhatsApp not delivered, fallback required");
+      return res.json({
+        success: true,
+        message: "تم إنشاء كود التحقق، ولكن لم يتم إرسال رسالة واتساب",
+        otp_demo: otp,
+      });
+    }
+
+    // =====================================================
+    // 5) ردّ النجاح
+    // =====================================================
+    return res.json({
       success: true,
-      message: "تم إرسال كود التحقق",
-      otp_demo: otp, // ⚠️ مؤقتًا أثناء التطوير
-      data: { id: user.id, phone: user.phone, name: user.name },
+      message: "تم إرسال كود التحقق عبر واتساب",
+      otp_demo: otp, // فقط أثناء التطوير
+      data: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+      },
     });
+
   } catch (err) {
     console.error("❌ login-phone error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: "حدث خلل في الخادم",
+    });
   }
 });
+
 
 /* =========================================================
    🔐 2️⃣ Verify OTP and Login
