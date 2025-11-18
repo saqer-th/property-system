@@ -1,7 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { verifyToken } from "../middleware/authMiddleware.js";
-import { sendWhatsAppMessage } from "../utils/whatsappClient.js";
+import { sendWhatsAppOTP } from "../utils/whatsappClient.js";
 
 const router = express.Router();
 
