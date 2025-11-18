@@ -1,7 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { verifyToken } from "../middleware/authMiddleware.js";
-import { sendWhatsAppOTP } from "../utils/whatsappClient.js";
+import { sendWhatsAppMessage } from "../utils/whatsappClient.js";
 
 const router = express.Router();
 
@@ -31,11 +31,11 @@ router.post("/login-phone", async (req, res) => {
   phone = normalizePhone(phone);
 
   try {
-    // * التحقق من وجود المستخدم
+    // ✅ تحقق من وجود المستخدم
     let { rows } = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
     let user = rows[0];
 
-    // * إذا غير موجود → أنشئ مستخدم جديد
+    // 🧩 إنشاء مستخدم جديد إذا غير موجود
     if (!user) {
       const result = await pool.query(
         `INSERT INTO users (name, phone, created_at, is_active)
@@ -43,10 +43,9 @@ router.post("/login-phone", async (req, res) => {
          RETURNING *`,
         ["مستخدم جديد", phone]
       );
-
       user = result.rows[0];
 
-      // * إضافة دور tenant افتراضيًا
+      // تعيين دور tenant افتراضيًا
       const roleRes = await pool.query("SELECT id FROM roles WHERE role_name='tenant'");
       if (roleRes.rows.length) {
         await pool.query(
@@ -56,35 +55,39 @@ router.post("/login-phone", async (req, res) => {
       }
     }
 
-    // * إنشاء كود OTP
+    // إنشاء كود OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
     await pool.query("DELETE FROM user_otp WHERE phone=$1", [phone]);
     await pool.query(
       `INSERT INTO user_otp (phone, otp_code, expires_at)
        VALUES ($1,$2,NOW()+INTERVAL '5 minutes')`,
       [phone, otp]
     );
+    await sendWhatsAppMessage(
+  phone,
+  `مرحبًا 👋
 
-    /* ========================================================
-       🔥 هنا المهم: إرسال صورة + OTP
-       ======================================================== */
-    await sendWhatsAppOTP(phone, otp);
+نرحب بك في نظام إدارة الأملاك، ويسعدنا تسجيل دخولك معنا.
+لأمان حسابك، نرسل لك رمز التحقق الخاص بك.
 
-    // * الاستجابة
+رمز التحقق هو: *{{OTP}}* 🔐  
+صالح لمدة 5 دقائق فقط.
+
+إذا لم تقم بطلب هذا الرمز، يمكنك تجاهل الرسالة بأمان.
+
+شكراً لثقتك في منصتنا 🌟`
+      );
     res.json({
       success: true,
       message: "تم إرسال كود التحقق",
-      otp_demo: otp, // فقط أثناء التطوير
+      otp_demo: otp, // ⚠️ مؤقتًا أثناء التطوير
       data: { id: user.id, phone: user.phone, name: user.name },
     });
-
   } catch (err) {
     console.error("❌ login-phone error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
 
 /* =========================================================
    🔐 2️⃣ Verify OTP and Login

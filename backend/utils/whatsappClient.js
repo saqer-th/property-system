@@ -1,11 +1,11 @@
-import wa from "@open-wa/wa-automate";
+import venom from "venom-bot";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 /* =========================================================
    🧭 إعداد المسارات
-   ========================================================= */
+========================================================= */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -28,90 +28,60 @@ let isInitializing = false;
 let connectionState = "DISCONNECTED";
 
 /* =========================================================
-   🚀 إنشاء عميل واتساب متكامل (جلسة ثابتة)
-   ========================================================= */
+   🚀 إنشاء عميل واتساب متكامل (Venom)
+========================================================= */
 export async function initWhatsAppClient() {
   if (client || isInitializing) return client;
   isInitializing = true;
 
-  console.log("🚀 Initializing WhatsApp client...");
+  console.log("🚀 Initializing WhatsApp client (Venom)...");
 
   try {
-    const isProd = true;
-    const executablePath = isProd
-      ? "/usr/bin/chromium-browser"
-      : "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-
-    console.log("🧭 Using Chrome executable:", executablePath);
-    console.log("💾 WhatsApp session directory:", sessionDir);
-
-    // 🔍 تحقق إن كانت جلسة قديمة محفوظة
-    const hasExistingSession =
-      fs.existsSync(path.join(sessionDir, "Default")) &&
-      fs.existsSync(path.join(sessionDir, "Local State"));
-
-    if (hasExistingSession)
-      console.log("💾 Found existing WhatsApp session. Restoring...");
-    else console.log("📲 New session detected. Scan QR when prompted.");
-
-    const config = {
-      sessionId: "property-system-session",
-      multiDevice: true,
-      headless: isProd,
-      useChrome: true,
-      executablePath,
-      dataPath: sessionDir,
-      userDataDir: sessionDir,
-      qrTimeout: 0,
-      authTimeout: 0,
-      cacheEnabled: true,
+    client = await venom.create({
+      session: "property-system-session",
+      multidevice: true,
+      headless: true,
+      folderNameToken: "session",
       disableSpins: true,
-      killProcessOnBrowserClose: true,
-      safeMode: false,
-      qrLogSkip: false,
-      qrMaxRetries: 10,
-      chromiumArgs: [
+      logQR: true,
+      mkdirFolderToken: sessionDir,
+      browserArgs: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-extensions",
         "--disable-gpu",
         "--no-zygote",
-        `--user-data-dir=${sessionDir}`,
       ],
-    };
-
-    client = await wa.create(config);
-
-    /* =========================================================
-       🔄 مراقبة تغييرات الحالة
-       ========================================================= */
-    client.onStateChanged((state) => {
-      console.log("🔄 WhatsApp state:", state);
-      connectionState = state;
-
-      if (state === "CONFLICT") client.forceRefocus();
-      if (state === "CONNECTED" || state === "SYNCING") {
-        console.log("📶 WhatsApp connected successfully ✅");
-        connectionState = "CONNECTED";
-      }
-      if (state === "UNPAIRED") console.log("📲 Please scan QR again.");
     });
 
     /* =========================================================
-       📨 عند أول رسالة واردة نعتبر الجلسة مستقرة
-       ========================================================= */
-    client.onAnyMessage(() => {
+       🔄 مراقبة تغييرات الحالة
+    ========================================================= */
+    client.onStateChange((state) => {
+      console.log("🔄 WhatsApp state:", state);
+
+      if (["CONNECTED", "SYNCING", "OPENING"].includes(state)) {
+        connectionState = "CONNECTED";
+      } else {
+        connectionState = state;
+      }
+    });
+
+    /* =========================================================
+       📨 أول رسالة واردة = الجلسة مستقرة
+    ========================================================= */
+    client.onMessage(() => {
       if (connectionState !== "CONNECTED") {
         console.log("✅ WhatsApp is now active — session stable!");
         connectionState = "CONNECTED";
       }
     });
 
-    console.log("💾 WhatsApp session ready and saved in:", sessionDir);
-
+    console.log("💾 Venom WhatsApp session ready");
     isInitializing = false;
     return client;
+
   } catch (err) {
     console.error("❌ WhatsApp init error:", err.message);
     client = null;
@@ -123,7 +93,7 @@ export async function initWhatsAppClient() {
 
 /* =========================================================
    💬 إرسال رسالة واتساب
-   ========================================================= */
+========================================================= */
 function formatPhone(phone) {
   if (!phone) return null;
   let p = phone.toString().replace(/\D/g, "");
@@ -138,60 +108,25 @@ export async function sendWhatsAppMessage(phone, message) {
     if (!client) await initWhatsAppClient();
     if (connectionState !== "CONNECTED") {
       console.log(`⚠️ WhatsApp not connected (state: ${connectionState})`);
-      await new Promise((r) => setTimeout(r, 4000));
+      await new Promise((r) => setTimeout(r, 3000));
     }
 
     const target = phone.includes("@c.us") ? phone : formatPhone(phone);
+
     await client.sendText(target, message);
+
     console.log(`✅ WhatsApp message sent to ${target}`);
     return { success: true, target };
+
   } catch (err) {
     console.error("❌ WhatsApp send error:", err.message);
-    return { success: false, error: err.message };
-  }
-}
-/* =========================================================
-   📸 إرسال صورة + OTP لتفعيل المحادثة
-   ========================================================= */
-export async function sendWhatsAppOTP(phone, otp) {
-  try {
-    if (!client) await initWhatsAppClient();
-
-    const target = phone.includes("@c.us") ? phone : formatPhone(phone);
-
-    // المسار الفعلي للصورة
-    const imagePath = path.join(backendDir, "assets", "system-logo.png");
-
-    // 1) إرسال الصورة أولًا (لفتح المحادثة)
-    await client.sendImage(
-      target,
-      imagePath,
-      "system-logo",
-      "مرحبًا 👋\nنرسل لك الآن رمز التحقق للدخول."
-    );
-
-    console.log("📸 Image sent to:", target);
-
-    // 2) انتظار بسيط لإتاحة الوقت لفتح الجلسة
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-
-    // 3) إرسال كود OTP
-    await client.sendText(
-      target,
-      `رمز التحقق الخاص بك هو: *${otp}* 🔐\nصالح لمدة 5 دقائق.\n\nإذا لم تطلب هذا الرمز، تجاهل الرسالة.`
-    );
-
-    console.log("🔐 OTP sent to:", target);
-    return { success: true };
-  } catch (err) {
-    console.error("❌ WhatsApp OTP error:", err.message);
     return { success: false, error: err.message };
   }
 }
 
 /* =========================================================
    📊 حالة الاتصال
-   ========================================================= */
+========================================================= */
 export function getConnectionState() {
   return connectionState;
 }
@@ -203,11 +138,11 @@ export async function getWhatsAppClient() {
 
 /* =========================================================
    🧹 إغلاق الجلسة بشكل آمن
-   ========================================================= */
+========================================================= */
 export async function closeWhatsApp() {
   if (client) {
     try {
-      await client.kill();
+      await client.close();
       console.log("🧹 WhatsApp session closed");
     } catch (err) {
       console.error("⚠️ Error closing WhatsApp:", err.message);
@@ -220,7 +155,7 @@ export async function closeWhatsApp() {
 
 /* =========================================================
    🧩 إغلاق التطبيق بالكامل عند الخروج
-   ========================================================= */
+========================================================= */
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down gracefully...");
   await closeWhatsApp();
