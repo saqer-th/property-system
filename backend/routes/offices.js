@@ -99,10 +99,19 @@ router.post("/register", async (req, res) => {
   try {
     const normalizedPhone = normalizePhone(phone);
     if (!normalizedPhone)
-      return res.status(400).json({ success: false, message: "📱 رقم الجوال غير صالح" });
+      return res.status(400).json({
+        success: false,
+        message: "📱 رقم الجوال غير صالح",
+      });
 
-    // ✅ تحقق من وجود المستخدم أو أنشئه
-    const userRes = await pool.query("SELECT id FROM users WHERE phone=$1", [normalizedPhone]);
+    // ============================================================
+    // 1️⃣ التحقق من وجود مستخدم سابق أو إنشاء مستخدم جديد
+    // ============================================================
+    const userRes = await pool.query(
+      "SELECT id FROM users WHERE phone=$1 LIMIT 1",
+      [normalizedPhone]
+    );
+
     let owner_id = userRes.rows[0]?.id;
 
     if (!owner_id) {
@@ -114,32 +123,25 @@ router.post("/register", async (req, res) => {
       owner_id = newUser.rows[0].id;
     }
 
-    // ✅ إضافة الدور office
-    const officeRole = await pool.query(
-      `SELECT id FROM roles WHERE role_name='office' LIMIT 1`
+    // ============================================================
+    // 2️⃣ توقف تسجيل مكتب جديد إذا عنده مكتب سابق
+    // ============================================================
+    const officeCheck = await pool.query(
+      "SELECT id, status FROM offices WHERE owner_id=$1",
+      [owner_id]
     );
-    if (officeRole.rows.length) {
-      const exists = await pool.query(
-        `SELECT 1 FROM user_roles WHERE user_id=$1 AND role_id=$2`,
-        [owner_id, officeRole.rows[0].id]
-      );
-      if (!exists.rows.length) {
-        await pool.query(
-          `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`,
-          [owner_id, officeRole.rows[0].id]
-        );
-      }
-    }
 
-    // ✅ تحقق من عدم وجود مكتب سابق
-    const officeCheck = await pool.query("SELECT id FROM offices WHERE owner_id=$1", [owner_id]);
-    if (officeCheck.rows.length)
+    if (officeCheck.rows.length) {
       return res.status(400).json({
         success: false,
-        message: "⚠️ لديك مكتب مسجل مسبقًا. لا يمكن تسجيل أكثر من مكتب لنفس المالك.",
+        message:
+          "⚠️ لديك مكتب مسجل مسبقًا. لا يمكن تسجيل أكثر من مكتب لنفس المستخدم.",
       });
+    }
 
-    // ✅ إنشاء المكتب الجديد
+    // ============================================================
+    // 3️⃣ إنشاء المكتب (status = pending)
+    // ============================================================
     const officeInsert = await pool.query(
       `INSERT INTO offices
        (owner_id, name, owner_name, phone, email, commercial_reg, license_no, address, status, created_at)
@@ -159,7 +161,14 @@ router.post("/register", async (req, res) => {
 
     const office = officeInsert.rows[0];
 
-    // 🧾 سجل العملية
+    // ============================================================
+    // 4️⃣ بدون إضافة دور office هنا ❌
+    // سيتم منح الدور عند الموافقة (approve)
+    // ============================================================
+
+    // ============================================================
+    // 5️⃣ سجل العملية
+    // ============================================================
     await logAudit(pool, {
       user_id: owner_id,
       action: "INSERT",
@@ -170,11 +179,15 @@ router.post("/register", async (req, res) => {
       endpoint: "/offices/register",
     });
 
+    // ============================================================
+    // 6️⃣ إرسال الرد
+    // ============================================================
     res.json({
       success: true,
-      message: "✅ تم تسجيل المكتب بنجاح! بانتظار المراجعة.",
+      message: "✅ تم تسجيل المكتب بنجاح! بانتظار الموافقة من الإدارة.",
       office_id: office.id,
       owner_id,
+      status: "pending",
     });
   } catch (err) {
     console.error("❌ register office error:", err);
@@ -185,6 +198,7 @@ router.post("/register", async (req, res) => {
     });
   }
 });
+
 
 /* =========================================================
    🏢 عرض بيانات مكتب واحد

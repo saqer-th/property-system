@@ -366,7 +366,41 @@ router.post("/send", verifyToken, async (req, res) => {
 router.get("/logs", verifyToken, async (req, res) => {
   try {
     const userId = req.user?.id;
+    const activeRole = req.user?.activeRole;
 
+    /* ============================================================
+       🅰️ 1) إذا كان المستخدم ADMIN → اعرض كل السجلات
+    ============================================================ */
+    if (activeRole === "admin") {
+      const { rows } = await pool.query(
+        `
+        SELECT 
+          rl.id,
+          rl.created_at,
+          rl.status,
+          rl.target_phone,
+          rl.message_sent,
+          rl.sent_by_name,
+          rl.error_message,
+          rt.name AS reminder_name,
+          c.contract_no,
+          p.property_type AS property_name,
+          o.name AS office_name
+        FROM reminder_logs rl
+        LEFT JOIN reminder_templates rt ON rt.id = rl.reminder_id
+        LEFT JOIN contracts c ON c.id = rl.contract_id
+        LEFT JOIN properties p ON p.id = c.property_id
+        LEFT JOIN offices o ON o.id = rl.office_id
+        ORDER BY rl.created_at DESC
+        `
+      );
+
+      return res.json({ success: true, admin: true, data: rows });
+    }
+
+    /* ============================================================
+       🅱️ 2) المستخدم ليس Admin → استخراج المكتب المرتبط
+    ============================================================ */
     const { rows: officeRows } = await pool.query(
       `
       SELECT id FROM offices WHERE owner_id=$1
@@ -384,6 +418,9 @@ router.get("/logs", verifyToken, async (req, res) => {
 
     const officeId = officeRows[0].id;
 
+    /* ============================================================
+       🅾️ 3) جلب سجلات المكتب فقط
+    ============================================================ */
     const { rows } = await pool.query(
       `
       SELECT 
@@ -406,12 +443,14 @@ router.get("/logs", verifyToken, async (req, res) => {
       `,
       [officeId]
     );
-    console.log(officeId, rows.length);
-    res.json({ success: true, data: rows });
+
+    res.json({ success: true, office_id: officeId, data: rows });
+
   } catch (err) {
     console.error("❌ fetch logs error:", err);
     res.status(500).json({ success: false, message: "فشل تحميل سجل الرسائل" });
   }
 });
+
 
 export default router;

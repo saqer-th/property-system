@@ -198,6 +198,38 @@ router.get("/my", verifyToken, async (req, res) => {
   }
 });
 
+function normalizePhone(phone) {
+  if (!phone) return null;
+
+  phone = phone.toString().trim().replace(/[^0-9]/g, "");
+
+  // 009665XXXXXXXX
+  if (phone.startsWith("009665")) {
+    phone = "+" + phone.substring(2);
+  }
+
+  // 9665XXXXXXXX
+  if (phone.startsWith("9665")) {
+    phone = "+966" + phone.substring(3);
+  }
+
+  // 5XXXXXXXX → +9665XXXXXXXX
+  if (/^5\d{8}$/.test(phone)) {
+    phone = "+966" + phone;
+  }
+
+  // 05XXXXXXXX → +9665XXXXXXXX
+  if (/^05\d{8}$/.test(phone)) {
+    phone = "+966" + phone.substring(1);
+  }
+
+  // يجب أن تكون بالشكل النهائي
+  if (!/^\+9665\d{8}$/.test(phone)) {
+    return null;
+  }
+
+  return phone;
+}
 
 
 /* =========================================================
@@ -353,14 +385,14 @@ router.post("/full", verifyToken, async (req, res) => {
     ========================================================= */
     const createOrGetParty = async (party, role) => {
       if (!party?.name) return null;
-
+      const normalized = normalizePhone(party.phone);
       const existing = await client.query(
         `
         SELECT id FROM parties
         WHERE phone=$1 OR national_id=$2
         LIMIT 1
         `,
-        [party.phone, party.id]
+        [normalized, party.id]
       );
 
       if (existing.rowCount > 0) return existing.rows[0].id;
@@ -371,7 +403,7 @@ router.post("/full", verifyToken, async (req, res) => {
         VALUES ($1,$2,$3,$4)
         RETURNING id
         `,
-        [role, party.name, party.phone, party.id]
+        [role, party.name, normalized, party.id]
       );
 
       return inserted.rows[0].id;
@@ -404,10 +436,11 @@ router.post("/full", verifyToken, async (req, res) => {
     ========================================================= */
     const linkUserRole = async (party, role) => {
       if (!party?.phone) return;
-
+      const normalized = normalizePhone(party.phone);
+      if (!normalized) return;
       const existing = await client.query(
         "SELECT id FROM users WHERE phone=$1 LIMIT 1",
-        [party.phone]
+        [normalized]
       );
 
       let pid;
@@ -415,7 +448,7 @@ router.post("/full", verifyToken, async (req, res) => {
       if (existing.rowCount === 0) {
         const newUser = await client.query(
           "INSERT INTO users (name, phone) VALUES ($1,$2) RETURNING id",
-          [party.name, party.phone]
+          [party.name, normalized]
         );
         pid = newUser.rows[0].id;
       } else {
@@ -827,36 +860,45 @@ router.put("/:id/property", verifyToken, async (req, res) => {
    ========================================================= */
 router.put("/:id/tenants", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const tenants = req.body || [];
-  const client = await pool.connect();
+  let tenants = req.body || [];
 
+  if (!Array.isArray(tenants)) tenants = [];
+
+  const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // 🧹 حذف المستأجرين القدامى
-    await client.query("DELETE FROM contract_parties WHERE contract_id=$1 AND role='tenant'", [id]);
+    await client.query(
+      "DELETE FROM contract_parties WHERE contract_id=$1 AND role='tenant'",
+      [id]
+    );
 
-    // 🔁 إدخال المستأجرين الجدد
     for (const t of tenants) {
+      const phone = normalizePhone(t.phone);
+      const nationalId = t.national_id || t.id || null;
+
       const party = await client.query(
         `
         INSERT INTO parties (name, national_id, phone)
         VALUES ($1, $2, $3)
-        ON CONFLICT (national_id)
-        DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
+        ON CONFLICT (phone)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          national_id = COALESCE(EXCLUDED.national_id, parties.national_id)
         RETURNING id
         `,
-        [t.name, t.national_id || t.id || "", t.phone]
+        [t.name, nationalId, phone]
       );
 
       await client.query(
-        `INSERT INTO contract_parties (contract_id, party_id, role) VALUES ($1, $2, 'tenant')`,
+        `INSERT INTO contract_parties (contract_id, party_id, role)
+         VALUES ($1, $2, 'tenant')`,
         [id, party.rows[0].id]
       );
     }
 
     await client.query("COMMIT");
-    res.json({ success: true, message: "✅ تم تحديث بيانات المستأجرين بنجاح" });
+    res.json({ success: true, message: "تم تحديث المستأجرين بنجاح" });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error updating tenants:", err);
@@ -865,41 +907,51 @@ router.put("/:id/tenants", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 /* =========================================================
    👥 تحديث بيانات المؤجرين (Lessors)
    ========================================================= */
 router.put("/:id/lessors", verifyToken, async (req, res) => {
   const { id } = req.params;
-  const lessors = req.body || [];
-  const client = await pool.connect();
+  let lessors = req.body || [];
 
+  if (!Array.isArray(lessors)) lessors = [];
+
+  const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // 🧹 حذف المؤجرين القدامى
-    await client.query("DELETE FROM contract_parties WHERE contract_id=$1 AND role='lessor'", [id]);
+    await client.query(
+      "DELETE FROM contract_parties WHERE contract_id=$1 AND role='lessor'",
+      [id]
+    );
 
-    // 🔁 إدخال المؤجرين الجدد
     for (const l of lessors) {
+      const phone = normalizePhone(l.phone);
+      const nationalId = l.national_id || l.id || null;
+
       const party = await client.query(
         `
         INSERT INTO parties (name, national_id, phone)
         VALUES ($1, $2, $3)
-        ON CONFLICT (national_id)
-        DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
+        ON CONFLICT (phone)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          national_id = COALESCE(EXCLUDED.national_id, parties.national_id)
         RETURNING id
         `,
-        [l.name, l.national_id || l.id || "", l.phone]
+        [l.name, nationalId, phone]
       );
 
       await client.query(
-        `INSERT INTO contract_parties (contract_id, party_id, role) VALUES ($1, $2, 'lessor')`,
+        `INSERT INTO contract_parties (contract_id, party_id, role)
+         VALUES ($1, $2, 'lessor')`,
         [id, party.rows[0].id]
       );
     }
 
     await client.query("COMMIT");
-    res.json({ success: true, message: "✅ تم تحديث بيانات المؤجرين بنجاح" });
+    res.json({ success: true, message: "تم تحديث المؤجرين بنجاح" });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error updating lessors:", err);
@@ -908,6 +960,7 @@ router.put("/:id/lessors", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 
 /* =========================================================
    🏘️ تحديث بيانات الوحدات (Units)
@@ -1347,7 +1400,7 @@ async function reconcilePaymentsSmartV3(client, contractId) {
 
 }
 /* =========================================================
-   🧩 عرض تفاصيل العقد حسب الدور (يدعم المكاتب + تعدد الأدوار)
+   🧩 عرض تفاصيل العقد حسب الدور (يدعم المكاتب + تعدد الأدوار)fgj
    ========================================================= */
 /* =========================================================
    📄 عرض تفاصيل عقد — يدعم جميع الصلاحيات

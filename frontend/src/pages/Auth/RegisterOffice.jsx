@@ -17,18 +17,16 @@ export default function RegisterOffice() {
     commercial_reg: "",
     license_number: "",
     address: "",
-    password: "",
-    confirm: "",
   });
 
   const [loading, setLoading] = useState(false);
 
-  // ✅ تحديث الحقول
+  // تحديث الحقول
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // 📤 إرسال التسجيل
+  // إرسال التسجيل
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -40,18 +38,13 @@ export default function RegisterOffice() {
       commercial_reg,
       license_number,
       address,
-      password,
-      confirm,
     } = form;
 
-    if (!name || !phone || !password) {
-      return toast.error("📝 يرجى تعبئة جميع الحقول المطلوبة");
+    if (!name || !phone) {
+      return toast.error("📝 يرجى تعبئة اسم المكتب ورقم الجوال");
     }
 
-    if (password !== confirm) {
-      return toast.error("⚠️ كلمة المرور غير متطابقة");
-    }
-
+    // رقم سعودي
     const saudiRegex = /^05\d{8}$/;
     if (!saudiRegex.test(phone)) {
       return toast.error("📱 أدخل رقم جوال سعودي صحيح مثل 05XXXXXXXX");
@@ -71,18 +64,16 @@ export default function RegisterOffice() {
           phone,
           email,
           commercial_reg,
-          license_number,
+          license_no: license_number,
           address,
-          password,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success)
-        throw new Error(data.message || "فشل التسجيل");
+      if (!res.ok || !data.success) throw new Error(data.message);
 
-      toast.success("✅ تم إرسال طلب تسجيل المكتب بنجاح");
-      setTimeout(() => navigate("/login"), 2000);
+      toast.success("✅ تم تقديم طلب التسجيل! سيتم مراجعته من الإدارة");
+      setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
       console.error("❌ Register error:", err);
       toast.error(err.message || "حدث خطأ أثناء التسجيل");
@@ -102,13 +93,13 @@ export default function RegisterOffice() {
             تسجيل مكتب عقاري جديد
           </CardTitle>
           <p className="text-gray-500 text-sm mt-1">
-            أدخل معلومات مكتبك بدقة لإرسال طلب التسجيل إلى الإدارة
+            أدخل معلومات مكتبك لإرسال طلب التسجيل إلى الإدارة
           </p>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* معلومات أساسية */}
+            {/* أساسي */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
@@ -167,7 +158,7 @@ export default function RegisterOffice() {
               </div>
             </div>
 
-            {/* السجل التجاري والترخيص */}
+            {/* السجل والترخيص */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
@@ -205,41 +196,10 @@ export default function RegisterOffice() {
                 placeholder="الرياض - حي العليا - شارع التحلية"
                 rows="2"
                 className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-              ></textarea>
+              />
             </div>
 
-            {/* كلمة المرور */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  كلمة المرور <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  تأكيد كلمة المرور <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  name="confirm"
-                  value={form.confirm}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-            </div>
-
+            {/* زر الإرسال */}
             <Button
               type="submit"
               disabled={loading}

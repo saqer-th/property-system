@@ -57,56 +57,64 @@ router.put("/offices/:id/status", verifyToken, async (req, res) => {
 
   const canEdit = await checkPermission(activeRole, "offices", "can_edit");
   if (!canEdit)
-    return res.status(403).json({ success: false, message: "🚫 لا تملك صلاحية تعديل المكاتب." });
+    return res.status(403).json({
+      success: false,
+      message: "🚫 لا تملك صلاحية تعديل المكاتب.",
+    });
 
   try {
-    const { rows: officeRows } = await pool.query("SELECT * FROM offices WHERE id=$1", [id]);
+    // 1️⃣ جلب بيانات المكتب
+    const { rows: officeRows } = await pool.query(
+      "SELECT * FROM offices WHERE id=$1",
+      [id]
+    );
     if (!officeRows.length)
-      return res.status(404).json({ success: false, message: "❌ المكتب غير موجود" });
+      return res.status(404).json({
+        success: false,
+        message: "❌ المكتب غير موجود",
+      });
 
     const office = officeRows[0];
+    const owner_id = office.owner_id;
 
-    // تحديث الحالة
+    // 2️⃣ تحديث حالة المكتب
     if (status === "approved") {
       await pool.query(
-        `UPDATE offices SET status=$1, approved_by=$2, approved_at=NOW() WHERE id=$3`,
+        `
+        UPDATE offices 
+        SET status=$1, approved_by=$2, approved_at=NOW()
+        WHERE id=$3
+        `,
         [status, adminId, id]
       );
     } else {
-      await pool.query("UPDATE offices SET status=$1 WHERE id=$2", [status, id]);
+      await pool.query(
+        "UPDATE offices SET status=$1 WHERE id=$2",
+        [status, id]
+      );
     }
 
-    // تحويل صاحب المكتب إلى office_admin
+    // 3️⃣ إعطاء المستخدم دور office_admin عند الموافقة فقط
     if (status === "approved") {
-      const { rows: ownerUser } = await pool.query(
-        "SELECT id FROM users WHERE phone=$1 LIMIT 1",
-        [office.phone]
+      const roleRes = await pool.query(
+        "SELECT id FROM roles WHERE role_name='office_admin' LIMIT 1"
       );
 
-      if (ownerUser.length) {
-        const userId = ownerUser[0].id;
-        const { rows: hasAdmin } = await pool.query(
-          `SELECT ur.id FROM user_roles ur
-           JOIN roles r ON r.id = ur.role_id
-           WHERE ur.user_id=$1 AND r.role_name='office_admin'`,
-          [userId]
-        );
+      const adminRoleId = roleRes.rows[0]?.id;
 
-        if (!hasAdmin.length) {
-          const { rows: roleRes } = await pool.query(
-            "SELECT id FROM roles WHERE role_name='office_admin'"
-          );
-          const adminRoleId = roleRes[0]?.id;
-          if (adminRoleId)
-            await pool.query(
-              "INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2)",
-              [userId, adminRoleId]
-            );
-        }
+      if (adminRoleId) {
+        await pool.query(
+          `
+          INSERT INTO user_roles (user_id, role_id)
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING
+          `,
+          [owner_id, adminRoleId]
+        );
       }
     }
 
-    // إنشاء أو تحديث الاشتراك
+    // 4️⃣ إنشاء/تحديث الاشتراك
     if (status === "approved") {
       const startDate = new Date();
       const endDate = new Date();
@@ -127,7 +135,7 @@ router.put("/offices/:id/status", verifyToken, async (req, res) => {
       );
     }
 
-    // سجل أوديت
+    // 5️⃣ سجل أوديت
     await logAudit(pool, {
       user_id: adminId,
       action: "UPDATE",
@@ -147,9 +155,13 @@ router.put("/offices/:id/status", verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Error updating office status:", err);
-    res.status(500).json({ success: false, message: "Error updating office status" });
+    res.status(500).json({
+      success: false,
+      message: "Error updating office status",
+    });
   }
 });
+
 /* =========================================================
    🧩 تفعيل أو إيقاف المستخدم
    ========================================================= */

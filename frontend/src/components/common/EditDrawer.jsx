@@ -225,7 +225,13 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
             endpoint += "/property";
             break;
           case "tenants":
+            endpoint += `/${section}`;
+            payload = form.list || [];
+            break;
           case "lessors":
+            endpoint += `/${section}`;
+            payload = form.list || [];
+            break;
           case "units":
             endpoint += `/${section}`;
             payload = { units: form.list || [] };
