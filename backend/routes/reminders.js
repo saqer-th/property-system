@@ -355,15 +355,14 @@ router.post("/send", verifyToken, async (req, res) => {
   const sender = req.user;
 
   try {
-    // same preview process
-    const previewRes = await pool.query(
+    // 🧩 Load template
+    const { rows: tmplRows } = await pool.query(
       `SELECT * FROM reminder_templates WHERE id=$1`,
       [template_id]
     );
+    const template = tmplRows[0];
 
-    const template = previewRes.rows[0];
-
-    // access check
+    // 🛡 Access check
     const allowed = await checkContractAccess(
       contract_id,
       sender.id,
@@ -377,7 +376,7 @@ router.post("/send", verifyToken, async (req, res) => {
         message: "❌ لا تملك صلاحية الإرسال لهذا العقد",
       });
 
-    // get contract + tenant
+    // 🏷 Contract data
     const { rows: contractRows } = await pool.query(
       `
       SELECT 
@@ -396,36 +395,51 @@ router.post("/send", verifyToken, async (req, res) => {
       `,
       [contract_id]
     );
-
     const contract = contractRows[0];
 
-    // payment
+    // 💰 Payment
     const paymentResult = await getPaymentForTemplate(
       template.trigger_event,
       contract.id
     );
-    const payment = paymentResult.rows[0] || null;
+    const payment = paymentResult.rows[0] || {};
 
-    // fill template
-    const message = fillTemplate(template.template, {
-      name: contract.tenant_name,
-      tenant_name: contract.tenant_name,
-      contract_number: contract.contract_no,
-      office_name: contract.office_name,
-      property: contract.property_name,
-      start_date: new Date(contract.tenancy_start),
-      end_date: new Date(contract.tenancy_end)
+    // 🧩 Variables for template
+    const vars = {
+      name: contract.tenant_name || "",
+      tenant_name: contract.tenant_name || "",
+      contract_number: contract.contract_no || "",
+      office_name: contract.office_name || "",
+      property: contract.property_name || "",
+      sender_name: sender.name || "", // ⭐ مهم
+      start_date: contract.tenancy_start
+        ? new Date(contract.tenancy_start).toLocaleDateString("en-GB")
+        : "",
+      end_date: contract.tenancy_end
         ? new Date(contract.tenancy_end).toLocaleDateString("en-GB")
         : "",
-      amount: payment?.amount,
-      remaining_amount: payment?.remaining_amount,
-      due_date: payment?.due_date,
-      payment_date: payment?.paid_at,
-    });
+      amount: payment.amount || "",
+      remaining_amount: payment.remaining_amount || "",
+      due_date: payment.due_date
+        ? new Date(payment.due_date).toLocaleDateString("en-GB")
+        : "",
+      payment_date: payment.paid_at
+        ? new Date(payment.paid_at).toLocaleDateString("en-GB")
+        : "",
+    };
 
-    const finalMessage =
-      message + `\n\n📩 أرسلت من مكتب ${contract.office_name} بواسطة ${sender.name}`;
+    // 📝 Fill template
+    const filled = fillTemplate(template.template, vars);
 
+    // ✨ Signature (sender)
+    let finalMessage =
+      filled +
+      `\n\n📩 أُرسلت من مكتب ${contract.office_name} بواسطة ${sender.name}`;
+
+    // 🔄 Fix escaped \n → actual newlines
+    finalMessage = finalMessage.replace(/\\n/g, "\n");
+
+    // 📤 Send WhatsApp
     let status = "sent";
     let error_message = null;
 
@@ -436,13 +450,13 @@ router.post("/send", verifyToken, async (req, res) => {
       error_message = err.message;
     }
 
-    // save log
+    // 🧾 Save log
     await pool.query(
       `
       INSERT INTO reminder_logs 
       (reminder_id, office_id, contract_id, target_phone, message_sent, channel, status, sent_by, sent_by_name, error_message)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    `,
+      `,
       [
         template_id,
         contract.office_id,
@@ -471,6 +485,7 @@ router.post("/send", verifyToken, async (req, res) => {
     });
   }
 });
+
 
 
 /* ============================================================
