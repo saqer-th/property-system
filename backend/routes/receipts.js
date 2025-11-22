@@ -92,30 +92,74 @@ router.get("/my", verifyToken, async (req, res) => {
         WHERE (
           -- 🔹 السند مرتبط بعقد ضمن مكتب المستخدم (سواء مالك أو موظف)
           c.office_id IN (
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
             UNION
             SELECT office_id FROM office_users WHERE user_id = $1
           )
           -- 🔹 أو السند مرتبط بعقار يتبع المكتب
           OR p.office_id IN (
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
             UNION
             SELECT office_id FROM office_users WHERE user_id = $1
           )
           -- 🔹 أو السند مرتبط بوحدة لعقار المكتب
           OR u.property_id IN (
             SELECT id FROM properties WHERE office_id IN (
-              SELECT id FROM offices WHERE owner_id = $1
+              SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
               UNION
               SELECT office_id FROM office_users WHERE user_id = $1
             )
           )
           -- 🔹 أو المكتب نفسه مالك السند مباشرة
           OR r.office_id IN (
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
             UNION
             SELECT office_id FROM office_users WHERE user_id = $1
           )
+        )
+        ORDER BY r.date DESC, r.id DESC;
+      `;
+      params = [userId];
+    }
+    /* =========================================================
+      🏠 2.5️⃣ مالك Self-Managed Owner
+      يرى فقط السندات التابعة لمكتبه الخاص
+      ========================================================= */
+    else if (activeRole === "self_office_admin") {
+      query = `
+        SELECT 
+          r.id,
+          r.receipt_type,
+          CASE 
+            WHEN r.receipt_type ILIKE 'قبض' THEN 'سند قبض'
+            WHEN r.receipt_type ILIKE 'صرف' THEN 'سند صرف'
+            WHEN r.receipt_type ILIKE 'adjustment' THEN 'تسوية'
+            ELSE 'غير محدد'
+          END AS receipt_type_label,
+          r.reference_no,
+          r.reason,
+          r.description AS notes,
+          r.amount,
+          COALESCE(r.payer_name, r.payer, '—') AS payer_name,
+          COALESCE(r.receiver_name, r.receiver, '—') AS receiver_name,
+          r.payment_method,
+          TO_CHAR(r.date, 'YYYY-MM-DD') AS receipt_date,
+          r.property_id,
+          r.unit_id,
+          r.contract_id,
+          c.contract_no,
+          u.unit_no,
+          p.property_type AS property_name,
+          o.name AS office_name
+        FROM receipts r
+        LEFT JOIN contracts c ON c.id = r.contract_id
+        LEFT JOIN properties p ON p.id = r.property_id
+        LEFT JOIN units u ON u.id = r.unit_id
+        LEFT JOIN offices o ON o.id = COALESCE(c.office_id, p.office_id, r.office_id)
+        WHERE COALESCE(c.office_id, p.office_id, r.office_id) = (
+          SELECT id FROM offices
+          WHERE owner_id = $1 AND is_owner_office = true
+          LIMIT 1
         )
         ORDER BY r.date DESC, r.id DESC;
       `;
@@ -245,6 +289,9 @@ router.get("/my", verifyToken, async (req, res) => {
 /* =========================================================
    ➕ 2️⃣ إضافة سند جديد (قبض / صرف / تسوية)
    ========================================================= */
+// =====================================================
+// 🧾 إنشاء سند جديد
+// =====================================================
 router.post("/", verifyToken, async (req, res) => {
   const {
     receipt_type,
@@ -270,75 +317,89 @@ router.post("/", verifyToken, async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 🧾 إنشاء رقم مرجعي تلقائي
     const ref = `R-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
       1000 + Math.random() * 9000
     )}`;
 
-    // 🏢 تحديد office_id المرتبط بالسند (من الأعلى أولوية إلى الأدنى)
+    // =====================================================
+    // 🎯 1️⃣ تحديد المكتب الصحيح حسب الدور
+    // =====================================================
     let office_id = null;
 
-    // 1️⃣ المستخدم مالك مكتب
-    const resOwner = await client.query(
-      `SELECT id AS office_id FROM offices WHERE owner_id = $1 LIMIT 1;`,
-      [userId]
-    );
-    if (resOwner.rows.length > 0) {
-      office_id = resOwner.rows[0].office_id;
-    }
-
-    // 2️⃣ المستخدم موظف في مكتب
-    if (!office_id) {
-      const resStaff = await client.query(
-        `SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1;`,
+    if (activeRole === "self_office_admin") {
+      // مكتب المالك الخاص فقط
+      const q = await client.query(
+        `SELECT id FROM offices 
+         WHERE owner_id = $1 AND is_owner_office = true
+         LIMIT 1`,
         [userId]
       );
-      if (resStaff.rows.length > 0) {
-        office_id = resStaff.rows[0].office_id;
+      office_id = q.rows[0]?.id || null;
+    }
+
+    else if (["office", "office_admin"].includes(activeRole)) {
+      // المكتب الحقيقي فقط
+      const q = await client.query(
+        `SELECT id FROM offices 
+         WHERE owner_id = $1 AND is_owner_office = false
+         LIMIT 1`,
+        [userId]
+      );
+      office_id = q.rows[0]?.id || null;
+
+      // إذا كان موظف مكتب
+      if (!office_id) {
+        const q2 = await client.query(
+          `SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1`,
+          [userId]
+        );
+        office_id = q2.rows[0]?.office_id || null;
       }
     }
 
-    // 3️⃣ العقد (لو مرتبط بعقد)
+    // =====================================================
+    // 🎯 2️⃣ fallback من العقد > العقار > الوحدة
+    // =====================================================
     if (!office_id && contract_id) {
-      const res1 = await client.query(
-        `SELECT office_id FROM contracts WHERE id = $1 LIMIT 1;`,
+      const q = await client.query(
+        `SELECT office_id FROM contracts WHERE id = $1 LIMIT 1`,
         [contract_id]
       );
-      if (res1.rows.length > 0) office_id = res1.rows[0].office_id;
+      office_id = q.rows[0]?.office_id || office_id;
     }
 
-    // 4️⃣ العقار (لو مرتبط بعقار)
     if (!office_id && property_id) {
-      const res2 = await client.query(
-        `SELECT office_id FROM properties WHERE id = $1 LIMIT 1;`,
+      const q = await client.query(
+        `SELECT office_id FROM properties WHERE id = $1 LIMIT 1`,
         [property_id]
       );
-      if (res2.rows.length > 0) office_id = res2.rows[0].office_id;
+      office_id = q.rows[0]?.office_id || office_id;
     }
 
-    // 5️⃣ الوحدة (لو مرتبط بوحدة)
     if (!office_id && unit_id) {
-      const res3 = await client.query(
+      const q = await client.query(
         `SELECT p.office_id 
-        FROM units u 
-        JOIN properties p ON p.id = u.property_id 
-        WHERE u.id = $1 LIMIT 1;`,
+         FROM units u 
+         JOIN properties p ON p.id = u.property_id 
+         WHERE u.id = $1 LIMIT 1`,
         [unit_id]
       );
-      if (res3.rows.length > 0) office_id = res3.rows[0].office_id;
+      office_id = q.rows[0]?.office_id || office_id;
     }
 
+    // =====================================================
     // 🚨 تحقق نهائي
-    if (!office_id && ["office", "office_admin"].includes(activeRole)) {
+    // =====================================================
+    if (!office_id) {
       return res.status(400).json({
         success: false,
-        message: "❌ لم يتم تحديد المكتب المرتبط بالسند. تأكد من أنك مسجل كمكتب أو موظف مكتب.",
+        message: "❌ لا يمكن تحديد المكتب المرتبط بالسند.",
       });
     }
 
-
-
-    // 🧾 إدخال السند
+    // =====================================================
+    // 🧾 إضافة السند
+    // =====================================================
     const receiptRes = await client.query(
       `
       INSERT INTO receipts (
@@ -354,7 +415,7 @@ router.post("/", verifyToken, async (req, res) => {
         property_id || null,
         unit_id || null,
         contract_id || null,
-        office_id || null,
+        office_id,
         notes || description || "",
         Number(amount) || 0,
         payer_name || payer || "غير محدد",
@@ -365,8 +426,11 @@ router.post("/", verifyToken, async (req, res) => {
       ]
     );
 
-    // 💰 تحديث حالة الدفعات لو فيه عقد
+    // =====================================================
+    // 💰 تحديث الدفعات (إن وجد)
+    // =====================================================
     const { contract_id: cid, amount: totalPaid } = receiptRes.rows[0];
+
     if (cid && totalPaid > 0) {
       let remaining = Number(totalPaid);
       const { rows: dues } = await client.query(
@@ -410,7 +474,7 @@ router.post("/", verifyToken, async (req, res) => {
       receipt_id: receiptRes.rows[0].id,
       reference_no: ref,
       office_id,
-      message: "✅ تم حفظ السند وربطه بالمكتب بنجاح",
+      message: "✅ تم حفظ السند وربطه بالمكتب الصحيح",
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -424,6 +488,7 @@ router.post("/", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 
 
 

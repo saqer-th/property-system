@@ -83,7 +83,12 @@ export default function EditDrawer({ open, setOpen, section, contract, setContra
           })),
         };
         case "broker":
-          return contract.brokerage_entity || {};
+          return {
+            name: contract.broker?.name || "",
+            license_no: contract.broker?.license_no || "",
+            address: contract.broker?.address || "",
+            phone: contract.broker?.phone || "",
+          };
         case "property":
           // use provided property prop first, otherwise contract.property, otherwise contract (when contract payload is actually a property)
           const src = property || contract?.property || contract || {};

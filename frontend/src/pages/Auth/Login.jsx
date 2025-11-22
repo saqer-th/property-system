@@ -175,6 +175,15 @@ export default function LoginPhone() {
                   سجل مكتبك هنا
                 </span>
               </p>
+              <p className="text-center text-sm text-gray-500 mt-2">
+                هل أنت مالك عقار؟{" "}
+                <span
+                  className="text-emerald-600 cursor-pointer hover:underline"
+                  onClick={() => navigate("/register-owner")}
+                >
+                  سجل كمالك هنا
+                </span>
+              </p>
             </form>
           ) : (
             // ==========================

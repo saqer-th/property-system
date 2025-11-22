@@ -9,7 +9,7 @@ import { Loader2, Save, UserCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function Settings() {
-  const { user, setUser } = useAuth();
+  const { user, login } = useAuth();
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -69,7 +69,14 @@ export default function Settings() {
       if (!res.ok || !json.success) throw new Error(json.message || "فشل حفظ التعديلات");
 
       toast.success("✅ تم حفظ التعديلات بنجاح");
-      setUser({ ...user, name: form.name, email: form.email, phone: form.phone });
+      // 🧠 تحديث بيانات المستخدم في السياق
+      login({
+  ...user,
+  name: form.name,
+  email: form.email,
+  phone: form.phone,
+});
+
     } catch (err) {
       console.error("❌ Error saving user:", err);
       toast.error(err.message || "فشل حفظ التعديلات");

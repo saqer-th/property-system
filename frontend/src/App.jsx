@@ -12,6 +12,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import Login from "@/pages/Auth/Login";
 import Unauthorized from "@/pages/Auth/Unauthorized";
 import RegisterOffice from "@/pages/Auth/RegisterOffice";
+import RegisterOwner from "@/pages/Auth/RegisterOwner";
 
 // Dashboard
 import Dashboard from "@/pages/Dashboard";
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
           <Route path="/register-office" element={<RegisterOffice />} />
+          <Route path="/register-owner" element={<RegisterOwner />} />
 
           {/* Dashboard */}
           <Route

@@ -32,7 +32,7 @@ export default function ContractDetails() {
   const [error, setError] = useState(null);
 
   // 🔒 صلاحيات
-  const canEdit = user?.activeRole === "office_admin" ||user?.activeRole === "admin" ;
+  const canEdit = user?.activeRole === "office_admin" ||user?.activeRole === "admin" || user?.activeRole === "office" || user?.activeRole === "self_office_admin";
   const activeRole = user?.activeRole;
 
 
@@ -257,10 +257,10 @@ export default function ContractDetails() {
           icon={<Building2 className="text-indigo-600" />}
           title={t("brokerageInfo")}
           data={[
-            { label: t("brokerageName"), value: contract.brokerage_entity?.name },
-            { label: t("brokerageCR"), value: contract.brokerage_entity?.cr_no },
-            { label: t("brokeragePhone"), value: contract.brokerage_entity?.phone },
-            { label: t("brokerageAddress"), value: contract.brokerage_entity?.address },
+            { label: t("brokerageName"), value: contract.broker?.name },
+            { label: t("brokerageCR"), value: contract.broker?.license_no },
+            { label: t("brokeragePhone"), value: contract.broker?.phone },
+            { label: t("brokerageAddress"), value: contract.broker?.address },
           ]}
           onEdit={() => handleEdit("broker")}
           canEdit={canEdit}

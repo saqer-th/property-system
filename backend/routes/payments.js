@@ -83,10 +83,48 @@ LEFT JOIN units u ON u.id = cu.unit_id
         SELECT office_id FROM office_users WHERE user_id = $1
       )
       OR c.office_id IN (
-        SELECT id FROM offices WHERE owner_id = $1
+        SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
       )
     ORDER BY p.due_date ASC NULLS LAST, p.id ASC;
   `;
+      params = [userId];
+    }
+    /* =========================================================
+      🏠 2.5️⃣ مالك Self-Managed Owner
+      ========================================================= */
+    else if (activeRole === "self_office_admin") {
+      query = `
+        SELECT 
+          p.id,
+          p.contract_id,
+          p.due_date,
+          p.amount,
+          COALESCE(p.paid_amount, 0) AS paid_amount,
+          (p.amount - COALESCE(p.paid_amount, 0)) AS remaining_amount,
+          p.status,
+          p.notes,
+          p.receipt_id,
+          c.contract_no,
+          pr.property_type AS property_name,
+          u.unit_no,
+          o.name AS office_name,
+          (SELECT name FROM parties pt
+            JOIN contract_parties cp ON cp.party_id = pt.id
+            WHERE cp.contract_id = c.id AND LOWER(TRIM(cp.role)) IN ('tenant','مستأجر')
+            LIMIT 1) AS tenant_name
+        FROM payments p
+        JOIN contracts c ON c.id = p.contract_id
+        LEFT JOIN properties pr ON pr.id = c.property_id
+        LEFT JOIN contract_units cu ON cu.contract_id = c.id
+        LEFT JOIN units u ON u.id = cu.unit_id
+        LEFT JOIN offices o ON o.id = c.office_id
+        WHERE c.office_id = (
+          SELECT id FROM offices 
+          WHERE owner_id = $1 AND is_owner_office = true
+          LIMIT 1
+        )
+        ORDER BY p.due_date ASC NULLS LAST, p.id ASC;
+      `;
       params = [userId];
     }
 
@@ -252,7 +290,7 @@ router.get("/summary", verifyToken, async (req, res) => {
 
     // 1️⃣ تحديد المكتب الذي ينتمي له المستخدم
     const officeQuery = `
-      SELECT id FROM offices WHERE owner_id = $1
+      SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
       UNION
       SELECT office_id FROM office_users WHERE user_id = $1
     `;

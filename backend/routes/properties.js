@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db/pool.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import e from "express";
 
 const router = express.Router();
 
@@ -40,30 +41,38 @@ router.get("/my", verifyToken, async (req, res) => {
     WHERE p.office_id IN (
         SELECT office_id FROM office_users WHERE user_id = $1
     )
-    OR o.owner_id = $1
+    OR (o.owner_id = $1 AND o.is_owner_office = false)
     ORDER BY p.id DESC
   `;
       params = [userId];
     }
-
-    /* 🏠 المالك يرى فقط العقارات الخاصة به */
-    else if (activeRole === "owner" || activeRole === "مالك") {
+    /* =========================================================
+      🏠 2.5️⃣ مالك النظام Self-Managed Owner
+      ========================================================= */
+    else if (activeRole === "self_office_admin") {
       query = `
-        SELECT DISTINCT 
-          p.id, p.title_deed_no, p.property_type, p.property_usage,
-          p.num_units, p.national_address, p.city, p.contract_id,
+        SELECT 
+          p.id,
+          p.title_deed_no,
+          p.property_type,
+          p.property_usage,
+          p.num_units,
+          p.national_address,
+          p.city,
+          p.contract_id,
           o.name AS office_name
         FROM properties p
-        JOIN contracts c ON c.property_id = p.id
-        JOIN contract_parties cp ON cp.contract_id = c.id
-        JOIN parties pr ON pr.id = cp.party_id
         LEFT JOIN offices o ON o.id = p.office_id
-        WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
-          AND REPLACE(REPLACE(pr.phone,'+966','0'),' ','') = REPLACE(REPLACE($1,'+966','0'),' ','')
+        WHERE p.office_id = (
+          SELECT id FROM offices
+          WHERE owner_id = $1 AND is_owner_office = true
+          LIMIT 1
+        )
         ORDER BY p.id DESC;
       `;
-      params = [phone];
+      params = [userId];
     }
+
 
     /* 👤 المستأجر يرى العقارات المرتبطة بعقوده */
     else if (activeRole === "tenant" || activeRole === "مستأجر") {
@@ -159,7 +168,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     WHERE p.id = $1
       AND (
         p.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
-        OR o.owner_id = $2
+        OR (o.owner_id = $2 AND o.is_owner_office = false)
       )
     LIMIT 1
         `,
@@ -167,6 +176,38 @@ router.get("/:id", verifyToken, async (req, res) => {
       );
       allowed = check.rowCount > 0;
     }
+    else if (activeRole === "self_office_admin") {
+      const check = await client.query(
+        `
+          SELECT 1
+          FROM properties p
+          JOIN offices o ON o.id = p.office_id
+          WHERE p.id = $1
+            AND (
+              -- 🔹 عقار تابع لمكتب المالك الخاص
+              (o.owner_id = $2 AND o.is_owner_office = true)
+
+              OR
+
+              -- 🔹 عقار له عقد والمستخدم مؤجر فيه
+              p.id IN (
+                SELECT c.property_id
+                FROM contracts c
+                JOIN contract_parties cp ON cp.contract_id = c.id
+                JOIN parties pr ON pr.id = cp.party_id
+                WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+                  AND REPLACE(REPLACE(pr.phone,'+966','0'),' ','') =
+                      REPLACE(REPLACE($3,'+966','0'),' ','')
+              )
+            )
+          LIMIT 1
+        `,
+        [propertyId, userId, phone]
+      );
+
+      allowed = check.rowCount > 0;
+    }
+
     else if (["owner","مالك"].includes(activeRole)) {
       const check = await client.query(
         `

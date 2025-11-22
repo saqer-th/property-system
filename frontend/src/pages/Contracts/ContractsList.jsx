@@ -42,7 +42,7 @@ export default function ContractsList() {
   const [showAdvanceOnly, setShowAdvanceOnly] = useState(false);
 
   const activeRole = user?.activeRole;
-  const canAdd = ["admin", "office_admin", "office"].includes(activeRole);
+  const canAdd = ["admin", "office_admin", "office", "self_office_admin"].includes(activeRole);
 
   // 📦 Load contracts
   useEffect(() => {

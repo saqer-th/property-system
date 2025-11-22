@@ -34,6 +34,7 @@ export default function RoleSwitcher() {
     office: t("office"),
     admin: t("admin"),
     office_admin: t("office_admin"),
+    self_office_admin: t("self_office_admin"),
   };
 
   // 🔄 تبديل الدور من السيرفر مباشرة

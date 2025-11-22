@@ -26,7 +26,6 @@ export default function Sidebar() {
   const location = useLocation();
   const { user } = useAuth();
 
-  // Active state helper
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(`${path}/`);
 
@@ -43,59 +42,61 @@ export default function Sidebar() {
   ];
 
   // -----------------------------
-  // 2️⃣ المكتب (Office)
+  // 2️⃣ قائمة المكتب
   // -----------------------------
   const officeId = user?.office_id || user?.id || 0;
 
-  const officeMenu = [
-    {
+  const officeMenu = [];
+
+  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
+    officeMenu.push({
       icon: <Briefcase size={18} />,
       label: t("menu_office_panel") || "لوحة المكتب",
       path: `/offices/${officeId}`,
-    },
-  ];
-
-  // 🔔 التذكيرات
-  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
-    officeMenu.push(
-      { divider: true },
-      {
-        icon: <Clock size={18} />,
-        label: t("menu_reminders") || "التذكيرات",
-        path: "/office/reminders/log",
-      }
-    );
+    });
   }
 
   // -----------------------------
-  // 3️⃣ قسم التقارير (جديد)
+  // 3️⃣ قائمة التذكيرات (منفصلة)
+  // -----------------------------
+  const reminderMenu = [];
+
+  if (["office", "office_admin", "admin", "self_office_admin"].includes(user?.activeRole)) {
+    reminderMenu.push({
+      icon: <Clock size={18} />,
+      label: t("menu_reminders") || "التذكيرات",
+      path: "/office/reminders/log",
+    });
+  }
+
+  // -----------------------------
+  // 4️⃣ التقارير
   // -----------------------------
   const reportMenu = [];
 
-  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
-    reportMenu.push(
-      { divider: true },
-      {
-        icon: <FileSpreadsheet size={18} />,
-        label: t("menu_reports") || "التقارير",
-        path: "/reports",
-      }
-    );
+  if (["office", "office_admin", "admin", "self_office_admin"].includes(user?.activeRole)) {
+    reportMenu.push({
+      icon: <FileSpreadsheet size={18} />,
+      label: t("menu_reports") || "التقارير",
+      path: "/reports",
+    });
   }
 
   // -----------------------------
-  // 4️⃣ الأدمن
+  // 5️⃣ الأدمن
   // -----------------------------
-  const adminMenu = [
-    {
+  const adminMenu = [];
+
+  if (user?.activeRole === "admin") {
+    adminMenu.push({
       icon: <Shield size={18} />,
       label: t("menu_admin_dashboard") || "لوحة الأدمن",
       path: "/admin/dashboard",
-    },
-  ];
+    });
+  }
 
   // -----------------------------
-  // 5️⃣ الإعدادات
+  // 6️⃣ الإعدادات
   // -----------------------------
   const settingsMenu = [
     {
@@ -110,15 +111,19 @@ export default function Sidebar() {
   // -----------------------------
   let finalMenu = [...generalMenu];
 
-  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
+  if (officeMenu.length > 0) {
     finalMenu.push({ divider: true }, ...officeMenu);
   }
 
-  if (["office", "office_admin", "admin"].includes(user?.activeRole)) {
-    finalMenu.push(...reportMenu);
+  if (reminderMenu.length > 0) {
+    finalMenu.push({ divider: true }, ...reminderMenu);
   }
 
-  if (user?.activeRole === "admin") {
+  if (reportMenu.length > 0) {
+    finalMenu.push({ divider: true }, ...reportMenu);
+  }
+
+  if (adminMenu.length > 0) {
     finalMenu.push({ divider: true }, ...adminMenu);
   }
 

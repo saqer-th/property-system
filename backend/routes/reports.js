@@ -1864,17 +1864,17 @@ router.get("/summary/profit", verifyToken, async (req, res) => {
     }
 
     const officeFilterC = `(
-      c.office_id IN (SELECT id FROM offices WHERE owner_id = $1)
+      c.office_id IN (SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false)
       OR c.office_id IN (SELECT office_id FROM office_users WHERE user_id = $1)
     )`;
 
     const officeFilterE = `(
-      e.office_id IN (SELECT id FROM offices WHERE owner_id = $1)
+      e.office_id IN (SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false)
       OR e.office_id IN (SELECT office_id FROM office_users WHERE user_id = $1)
     )`;
 
     const officeFilterR = `(
-      r.office_id IN (SELECT id FROM offices WHERE owner_id = $1)
+      r.office_id IN (SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false)
       OR r.office_id IN (SELECT office_id FROM office_users WHERE user_id = $1)
     )`;
 

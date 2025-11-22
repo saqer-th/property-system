@@ -433,6 +433,168 @@ router.get("/me", async (req, res) => {
 });
 
 /* =========================================================
+   🏢 Register Owner (Self-Managed Owner)
+   ========================================================= */
+/* =========================================================
+   🏢 Register Owner (Self-Managed Owner)
+   ========================================================= */
+router.post("/register-owner", async (req, res) => {
+  const pool = req.pool;
+  const { name, phone } = req.body;
+
+  if (!name || !phone) {
+    return res.status(400).json({
+      success: false,
+      message: "الاسم ورقم الجوال مطلوبان",
+    });
+  }
+
+  const normalizedPhone = normalizePhone(phone);
+
+  try {
+    /* =========================================================
+       1️⃣ تحقق هل المستخدم موجود مسبقًا
+    ========================================================= */
+    const existingUser = await pool.query(
+      "SELECT id, name, phone FROM users WHERE phone=$1 LIMIT 1",
+      [normalizedPhone]
+    );
+
+    let userId;
+    let userData;
+
+    if (existingUser.rows.length > 0) {
+      // المستخدم موجود
+      userId = existingUser.rows[0].id;
+      userData = existingUser.rows[0];
+    } else {
+      // مستخدم جديد
+      const newUserRes = await pool.query(
+        `INSERT INTO users (name, phone, is_active, created_at)
+         VALUES ($1,$2,true,NOW())
+         RETURNING id, name, phone`,
+        [name, normalizedPhone]
+      );
+      userId = newUserRes.rows[0].id;
+      userData = newUserRes.rows[0];
+    }
+
+    /* =========================================================
+       2️⃣ تحقق هل لديه مكتب مالك خاص سابقًا
+    ========================================================= */
+    const ownerOfficeRes = await pool.query(
+      `SELECT id, name
+       FROM offices
+       WHERE owner_id=$1 AND is_owner_office=true
+       LIMIT 1`,
+      [userId]
+    );
+
+    let ownerOffice;
+    let ownerOfficeId;
+
+    if (ownerOfficeRes.rows.length > 0) {
+      // مكتب المالك موجود
+      ownerOffice = ownerOfficeRes.rows[0];
+      ownerOfficeId = ownerOffice.id;
+    } else {
+      // إنشاء مكتب جديد للمالك
+      const newOffice = await pool.query(
+        `INSERT INTO offices (name, owner_id, phone, status, created_at, is_owner_office)
+         VALUES ($1,$2,$3,'active',NOW(),true)
+         RETURNING id, name`,
+        [`مكتب المالك: ${name}`, userId, normalizedPhone]
+      );
+
+      ownerOffice = newOffice.rows[0];
+      ownerOfficeId = ownerOffice.id;
+    }
+
+    /* =========================================================
+       3️⃣ إضافة دور self_office_admin إن لم يكن موجودًا
+    ========================================================= */
+    const roleCheck = await pool.query(
+      `
+      SELECT r.id FROM roles r
+      JOIN user_roles ur ON ur.role_id = r.id
+      WHERE ur.user_id=$1 AND r.role_name='self_office_admin'
+      `,
+      [userId]
+    );
+
+    if (roleCheck.rows.length === 0) {
+      const roleRes = await pool.query(
+        "SELECT id FROM roles WHERE role_name='self_office_admin'"
+      );
+      await pool.query(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2)",
+        [userId, roleRes.rows[0].id]
+      );
+    }
+
+    /* =========================================================
+       4️⃣ جلب جميع أدوار المستخدم بدون حذف القديمة
+    ========================================================= */
+    const allRolesRes = await pool.query(
+      `
+      SELECT r.role_name
+      FROM roles r
+      JOIN user_roles ur ON ur.role_id = r.id
+      WHERE ur.user_id = $1
+      `,
+      [userId]
+    );
+
+    const allRoles = allRolesRes.rows.map((r) => r.role_name);
+
+    /* =========================================================
+       5️⃣ إنشاء التوكن
+    ========================================================= */
+    const roleIdRes = await pool.query(
+      "SELECT id FROM roles WHERE role_name='self_office_admin'"
+    );
+
+    const token = jwt.sign(
+      {
+        id: userId,
+        phone: userData.phone,
+        roles: allRoles,
+        activeRole: "self_office_admin",
+        role_id: roleIdRes.rows[0].id,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    /* =========================================================
+       6️⃣ الرد النهائي
+    ========================================================= */
+    return res.json({
+      success: true,
+      message: "تم تجهيز حساب المالك ومكتبه الخاص بنجاح",
+      token,
+      data: {
+        user: userData,
+        office: ownerOffice,
+        roles: allRoles,
+        activeRole: "self_office_admin",
+      },
+    });
+
+  } catch (err) {
+    console.error("❌ register-owner error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "حدث خطأ أثناء تسجيل المالك.",
+      details: err.message,
+    });
+  }
+});
+
+
+
+
+/* =========================================================
    🚪 5️⃣ Logout
    ========================================================= */
 router.post("/logout", (req, res) => {

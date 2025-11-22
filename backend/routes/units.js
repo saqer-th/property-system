@@ -54,18 +54,52 @@ router.get("/my", verifyToken, async (req, res) => {
           p.office_id IN (
             SELECT office_id FROM office_users WHERE user_id = $1
             UNION
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
           )
           OR
           -- 🔹 الوحدات التي مرت بعقود المكتب
           c.office_id IN (
             SELECT office_id FROM office_users WHERE user_id = $1
             UNION
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
           )
         ORDER BY p.id, u.unit_no;
       `;
       params = [userId];
+    }
+    /* ----------------------------------------------------
+      🟪 3) مدير مكتب خاص (self_office_admin)
+      ---------------------------------------------------- */
+    else if (["self_office_admin"].includes(activeRole)) {
+      query = `
+        SELECT DISTINCT
+          u.id, u.unit_no, u.unit_type, u.unit_area,
+          p.id AS property_id, p.property_type, p.property_usage, p.title_deed_no
+        FROM units u
+        LEFT JOIN properties p ON p.id = u.property_id
+        LEFT JOIN contract_units cu ON cu.unit_id = u.id
+        LEFT JOIN contracts c ON c.id = cu.contract_id
+        WHERE 
+          (
+            -- 🔹 وحدات تابعة لمكتبه الخاص
+            p.office_id IN (
+              SELECT id FROM offices 
+              WHERE owner_id = $1 AND is_owner_office = true
+            )
+            OR
+            -- 🔹 وحدات لها عقود تخصه كمؤجر
+            c.id IN (
+              SELECT cp.contract_id
+              FROM contract_parties cp
+              JOIN parties pr ON pr.id = cp.party_id
+              WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+                AND REPLACE(REPLACE(pr.phone,'+966','0'),' ','') = 
+                    REPLACE(REPLACE($2,'+966','0'),' ','')
+            )
+          )
+        ORDER BY p.id, u.unit_no;
+      `;
+      params = [userId, phone];
     }
 
     /* ----------------------------------------------------
@@ -258,7 +292,7 @@ router.get("/:id", verifyToken, async (req, res) => {
         JOIN contracts c ON c.id = cu.contract_id
         WHERE cu.unit_id = $1
           AND (
-            c.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
+            c.office_id IN (SELECT id FROM offices WHERE owner_id = $2 )
             OR c.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
           )
         LIMIT 1
@@ -266,6 +300,39 @@ router.get("/:id", verifyToken, async (req, res) => {
         [unitId, userId]
       );
       allowed = officeCheck.rowCount > 0;
+    }
+    else if (activeRole === "self_office_admin") {
+      const selfCheck = await client.query(
+        `
+          SELECT 1
+          FROM units u
+          JOIN properties p ON p.id = u.property_id
+          JOIN offices o ON o.id = p.office_id
+          WHERE u.id = $1
+            AND (
+              -- 🟣 حالة 1: الوحدة تتبع مكتب المالك الخاص
+              (o.owner_id = $2 AND o.is_owner_office = true)
+
+              OR
+
+              -- 🟣 حالة 2: الوحدة لها عقد والمستخدم هو المؤجّر
+              u.id IN (
+                SELECT cu.unit_id
+                FROM contract_units cu
+                JOIN contracts c ON c.id = cu.contract_id
+                JOIN contract_parties cp ON cp.contract_id = c.id
+                JOIN parties pr ON pr.id = cp.party_id
+                WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+                  AND REPLACE(REPLACE(pr.phone,'+966','0'),' ','') =
+                      REPLACE(REPLACE($3,'+966','0'),' ','')
+              )
+            )
+          LIMIT 1
+        `,
+        [unitId, userId, phone]
+      );
+
+      allowed = selfCheck.rowCount > 0;
     }
 
     else if (["owner", "مالك"].includes(activeRole)) {
@@ -513,7 +580,7 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
         WHERE 
           u.property_id = $1
           AND (
-            p.office_id IN (SELECT id FROM offices WHERE owner_id = $2)
+            p.office_id IN (SELECT id FROM offices WHERE owner_id = $2 AND is_owner_office = false)
             OR p.office_id IN (SELECT office_id FROM office_users WHERE user_id = $2)
           )
         ORDER BY u.unit_no;

@@ -40,7 +40,7 @@ export default function ReceiptsList() {
   const activeRole = user?.activeRole;
 
   // 🔒 صلاحيات الإضافة
-  const canAdd = ["admin", "office_admin", "office"].includes(activeRole);
+  const canAdd = ["admin", "office_admin", "office", "self_office_admin"].includes(activeRole);
 
   // 📦 تحميل السندات
   async function fetchReceipts() {

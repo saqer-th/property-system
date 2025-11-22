@@ -305,6 +305,12 @@ function validateContract(data) {
   // 💰 الدفعات
   if (!data.payments?.length) errors.push("يجب إضافة دفعة واحدة على الأقل");
 
+  if (!data.brokerage_entity?.phone) {
+    errors.push("رقم جوال وسيط العقار");
+  } else if (!isValidSaudiPhone(data.brokerage_entity.phone)) {
+    errors.push("رقم جوال وسيط العقار غير صحيح (مثال: 0501234567)");
+  }
+
   return errors;
 }
 

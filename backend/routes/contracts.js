@@ -38,13 +38,23 @@ router.get("/my", verifyToken, async (req, res) => {
         SELECT office_id FROM office_users WHERE user_id = $1
       )
       OR c.office_id IN (
-        SELECT id FROM offices WHERE owner_id = $1
+        SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
       )
     )
   `;
         params = [userId];
         break;
-
+      case "self_office_admin":
+        whereClause = `
+        c.office_id = (
+      SELECT id FROM offices 
+      WHERE owner_id = $1 
+        AND is_owner_office = true
+      LIMIT 1
+    )
+  `;
+        params = [userId];
+        break;
       case "owner":
       case "مالك":
         whereClause = `
@@ -243,28 +253,56 @@ router.post("/full", verifyToken, async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    /* =========================================================
-       🧭 1️⃣ تحديد الـ OFFICE_ID
-    ========================================================= */
     let officeId = null;
 
-    const ownOffice = await client.query(
-      "SELECT id FROM offices WHERE owner_id = $1 LIMIT 1",
-      [userId]
-    );
-    if (ownOffice.rowCount > 0) {
-      officeId = ownOffice.rows[0].id;
-    }
-
-    if (!officeId) {
-      const empOffice = await client.query(
-        "SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1",
+    /* =========================================================
+      🏠 1️⃣ إذا المستخدم مالك self_office_admin
+      ========================================================= */
+    if (activeRole === "self_office_admin") {
+      const ownerOffice = await client.query(
+        `SELECT id FROM offices 
+        WHERE owner_id = $1 AND is_owner_office = true
+        LIMIT 1`,
         [userId]
       );
-      if (empOffice.rowCount > 0) {
-        officeId = empOffice.rows[0].office_id;
-      }
+      if (ownerOffice.rowCount > 0) officeId = ownerOffice.rows[0].id;
     }
+
+    /* =========================================================
+      🏢 2️⃣ إذا كان مشرف مكتب تجاري
+      ========================================================= */
+    else if (activeRole === "office_admin") {
+      const officeRes = await client.query(
+        `SELECT id FROM offices 
+        WHERE owner_id = $1 AND is_owner_office = false
+        LIMIT 1`,
+        [userId]
+      );
+      if (officeRes.rowCount > 0) officeId = officeRes.rows[0].id;
+    }
+
+    /* =========================================================
+      👤 3️⃣ إذا كان office_user (موظف في مكتب)
+      ========================================================= */
+    else if (activeRole === "office") {
+      const empOffice = await client.query(
+        `SELECT office_id FROM office_users WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      );
+      if (empOffice.rowCount > 0) officeId = empOffice.rows[0].office_id;
+    }
+
+    /* =========================================================
+      ⚠️ 4️⃣ إذا لا يوجد مكتب → توقف
+      ========================================================= */
+    if (!officeId) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "❌ لم يتم العثور على مكتب لربط العقد.",
+      });
+    }
+
 
     /* =========================================================
        🧩 0️⃣ تحقق تكرار رقم العقد داخل نفس المكتب
@@ -1209,83 +1247,145 @@ router.put("/:id/broker", verifyToken, async (req, res) => {
    💸 تحديث المصروفات لعقد معين (Expenses)
    ========================================================= */
 router.put("/:id/expenses", verifyToken, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params; // contract_id
   const expenses = req.body || [];
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    // حذف المصروفات القديمة
-    await client.query(`DELETE FROM expenses WHERE contract_id=$1`, [id]);
+    /* ----------------------------------------------------
+       1) جلب office_id من العقد
+    ---------------------------------------------------- */
+    const { rows: contractRows } = await client.query(
+      `SELECT office_id FROM contracts WHERE id = $1`,
+      [id]
+    );
 
-    // إدراج المصروفات الجديدة
+    const office_id = contractRows[0]?.office_id || null;
+
+    /* ----------------------------------------------------
+       2) حذف المصروفات القديمة الخاصة بالعقد
+    ---------------------------------------------------- */
+    await client.query(`DELETE FROM expenses WHERE contract_id = $1`, [id]);
+
+    /* ----------------------------------------------------
+       3) إدراج المصروفات الجديدة + office_id
+    ---------------------------------------------------- */
     for (const e of expenses) {
       await client.query(
         `
         INSERT INTO expenses (
-          contract_id, property_id, unit_id, description,
-          amount, expense_type, paid_by, on_whom,
-          settlement_type, settlement_timing, date, notes
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+          contract_id,
+          property_id,
+          unit_id,
+          office_id,               -- 👈 تمت الإضافة
+          description,
+          amount,
+          expense_type,
+          paid_by,
+          on_whom,
+          settlement_type,
+          settlement_timing,
+          date,
+          notes,
+          created_at
+          
+        )
+        VALUES (
+          $1,$2,$3,$4,
+          $5,$6,$7,$8,$9,$10,$11,
+          TO_DATE($12,'YYYY-MM-DD'),
+          $13,
+          NOW()
         )
         `,
         [
-          id,
+          id,                            // contract_id
           e.property_id || null,
           e.unit_id || null,
+          office_id,                     // 👈 ربط مكتب المصروف
           e.description || "",
-          e.amount || 0,
+          Number(e.amount || 0),
           e.expense_type || "",
           e.paid_by || "",
           e.on_whom || "",
           e.settlement_type || "",
           e.settlement_timing || "",
-          e.date || new Date(),
+          e.date ? e.date.split("T")[0] : new Date().toISOString().split("T")[0],
           e.notes || "",
         ]
       );
     }
 
+    /* ----------------------------------------------------
+       4) حفظ التغييرات
+    ---------------------------------------------------- */
     await client.query("COMMIT");
-    res.json({ success: true, message: "✅ تم تحديث المصروفات بنجاح" });
+
+    res.json({
+      success: true,
+      message: "✅ تم تحديث المصروفات بنجاح",
+    });
+
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Error updating expenses:", err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   } finally {
     client.release();
   }
 });
 
+
 /* =========================================================
    🧾 تحديث السندات (Receipts) + موازنة تلقائية
    ========================================================= */
 router.put("/:id/receipts", verifyToken, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params; // contract_id
   const receipts = req.body || [];
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    // حذف السندات القديمة
+    /* ----------------------------------------------------
+       1) جلب office_id من العقد
+    ---------------------------------------------------- */
+    const { rows: contractRows } = await client.query(
+      `SELECT office_id FROM contracts WHERE id = $1`,
+      [id]
+    );
+
+    const office_id = contractRows[0]?.office_id || null;
+
+    /* ----------------------------------------------------
+       2) حذف السندات القديمة
+    ---------------------------------------------------- */
     await client.query("DELETE FROM receipts WHERE contract_id=$1", [id]);
 
-    // إدراج السندات الجديدة
+    /* ----------------------------------------------------
+       3) إضافة السندات الجديدة مع office_id
+    ---------------------------------------------------- */
     for (const r of receipts) {
       await client.query(
         `
         INSERT INTO receipts (
           receipt_type, reference_no, property_id, unit_id, contract_id,
+          office_id,                    -- 👈 تمت الإضافة
           description, amount, payer, receiver, payment_method,
           date, reason, notes, payer_name, receiver_name,
           created_at, updated_at
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          TO_DATE($11,'YYYY-MM-DD'),$12,$13,$14,$15,NOW(),NOW()
+          $1,$2,$3,$4,$5,
+          $6,                           -- 👈 office_id
+          $7,$8,$9,$10,$11,
+          TO_DATE($12,'YYYY-MM-DD'),$13,$14,$15,$16,
+          NOW(),NOW()
         )
         `,
         [
@@ -1293,7 +1393,10 @@ router.put("/:id/receipts", verifyToken, async (req, res) => {
           r.reference_no || "",
           r.property_id || null,
           r.unit_id || null,
-          id,
+          id, // contract_id
+
+          office_id, // 👈 تم التمرير
+
           r.description || "",
           Number(r.amount || 0),
           r.payer || "",
@@ -1308,7 +1411,9 @@ router.put("/:id/receipts", verifyToken, async (req, res) => {
       );
     }
 
-    // تحديث الموازنة المالية بعد السندات
+    /* ----------------------------------------------------
+       4) تحديث الموازنة بعد السندات
+    ---------------------------------------------------- */
     await reconcilePaymentsSmartV3(client, id);
 
     await client.query("COMMIT");
@@ -1324,6 +1429,7 @@ router.put("/:id/receipts", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 
 /* =========================================================
    🧠 دالة الموازنة الذكية (Smart Reconciliation)
@@ -1416,7 +1522,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     let params = [];
 
     /* =========================================================
-       🛡️ 1️⃣ فلترة صلاحيات الوصول
+       1️⃣ فلترة صلاحيات الوصول حسب الدور
     ========================================================= */
     if (activeRole === "admin") {
       filter = isNumeric ? "c.id = $1" : "c.contract_no = $1";
@@ -1430,13 +1536,37 @@ router.get("/:id", verifyToken, async (req, res) => {
         AND c.office_id IN (
           SELECT office_id FROM office_users WHERE user_id = $2
           UNION
-          SELECT id FROM offices WHERE owner_id = $2
+          SELECT id FROM offices WHERE owner_id = $2 AND is_owner_office = false
         )
       `;
       params = [id, userId];
     }
 
-    // مالك العقار
+    // مالك Self Office (يدير عقاراته فقط)
+    else if (["self_office_admin"].includes(activeRole)) {
+      filter = `
+        ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
+        AND (
+          -- عقود تابعة لمكتب المالك الخاص
+          c.office_id IN (
+            SELECT id FROM offices 
+            WHERE owner_id = $2 AND is_owner_office = true
+          )
+          -- أو عقود هو فيها المؤجر
+          OR c.id IN (
+            SELECT cp.contract_id
+            FROM contract_parties cp
+            JOIN parties p ON p.id = cp.party_id
+            WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+              AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') =
+                  REPLACE(REPLACE(REPLACE($3,'+966','0'),' ','') ,'-','')
+          )
+        )
+      `;
+      params = [id, userId, phone];
+    }
+
+    // مالك العقار العادي
     else if (["owner", "مالك"].includes(activeRole)) {
       filter = `
         ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
@@ -1444,8 +1574,8 @@ router.get("/:id", verifyToken, async (req, res) => {
           SELECT cp.contract_id
           FROM contract_parties cp
           JOIN parties p ON p.id = cp.party_id
-          WHERE LOWER(TRIM(cp.role)) IN ('lessor', 'مالك')
-            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') = 
+          WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') =
                 REPLACE(REPLACE(REPLACE($2,'+966','0'),' ','') ,'-','')
         )
       `;
@@ -1453,7 +1583,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 
     // مستأجر
-    else if (["tenant", "مستأجر"].includes(activeRole)) {
+    else if (["tenant", "مستأجر", "مستاجر"].includes(activeRole)) {
       filter = `
         ${isNumeric ? "c.id = $1" : "c.contract_no = $1"}
         AND c.id IN (
@@ -1461,7 +1591,7 @@ router.get("/:id", verifyToken, async (req, res) => {
           FROM contract_parties cp
           JOIN parties p ON p.id = cp.party_id
           WHERE LOWER(TRIM(cp.role)) IN ('tenant','مستأجر','مستاجر')
-            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') = 
+            AND REPLACE(REPLACE(REPLACE(p.phone,'+966','0'),' ','') ,'-','') =
                 REPLACE(REPLACE(REPLACE($2,'+966','0'),' ','') ,'-','')
         )
       `;
@@ -1476,23 +1606,36 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 
     /* =========================================================
-       🧾 2️⃣ جلب بيانات العقد الأساسية
+       2️⃣ جلب بيانات العقد الأساسية + بيانات الوسيط
     ========================================================= */
     const baseRes = await client.query(
       `
       SELECT 
         c.*,
-        o.name AS office_name,
+
+        -- المكتب
         o.id AS office_id,
+        o.name AS office_name,
+
+        -- العقار
         p.property_type AS property_name,
         p.property_usage AS usage,
         p.num_units,
         p.national_address,
         p.city,
-        p.title_deed_no
+        p.title_deed_no,
+
+        -- بيانات الوسيط brokerage_entities
+        be.id   AS broker_entity_id,
+        be.name AS broker_name,
+        be.landline AS broker_phone,
+        be.cr_no AS broker_license_no,
+        be.address AS broker_address
+
       FROM contracts c
       LEFT JOIN offices o ON o.id = c.office_id
       LEFT JOIN properties p ON p.id = c.property_id
+      LEFT JOIN brokerage_entities be ON be.id = c.broker_id   -- 👈 هنا الوسيط
       WHERE ${filter}
       `,
       params
@@ -1508,7 +1651,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     const contract = baseRes.rows[0];
 
     /* =========================================================
-       🔗 3️⃣ تحميل العلاقات المرتبطة (بشكل متوازي)
+       3️⃣ تحميل العلاقات الأخرى بشكل متوازي
     ========================================================= */
     const [
       tenants,
@@ -1518,8 +1661,6 @@ router.get("/:id", verifyToken, async (req, res) => {
       expenses,
       receipts
     ] = await Promise.all([
-
-      // مستأجرين
       client.query(
         `
         SELECT pt.name, pt.national_id AS id, pt.phone
@@ -1530,7 +1671,6 @@ router.get("/:id", verifyToken, async (req, res) => {
         [contract.id]
       ),
 
-      // ملاك
       client.query(
         `
         SELECT pt.name, pt.national_id AS id, pt.phone
@@ -1541,7 +1681,6 @@ router.get("/:id", verifyToken, async (req, res) => {
         [contract.id]
       ),
 
-      // دفعات
       client.query(
         `
         SELECT id, due_date, amount, COALESCE(paid_amount,0) AS paid_amount,
@@ -1554,7 +1693,6 @@ router.get("/:id", verifyToken, async (req, res) => {
         [contract.id]
       ),
 
-      // الوحدات من contract_units
       client.query(
         `
         SELECT 
@@ -1569,13 +1707,10 @@ router.get("/:id", verifyToken, async (req, res) => {
         JOIN units u ON u.id = cu.unit_id
         WHERE cu.contract_id = $1
         ORDER BY u.unit_no
-
-
         `,
         [contract.id]
       ),
 
-      // مصروفات
       client.query(
         `
         SELECT id, expense_type, amount, paid_by, on_whom, notes, date 
@@ -1586,7 +1721,6 @@ router.get("/:id", verifyToken, async (req, res) => {
         [contract.id]
       ),
 
-      // سندات قبض/صرف
       client.query(
         `
         SELECT id, reference_no, receipt_type, payer, receiver, amount, date
@@ -1595,15 +1729,16 @@ router.get("/:id", verifyToken, async (req, res) => {
         ORDER BY date DESC
         `,
         [contract.id]
-      ),
+      )
     ]);
 
     /* =========================================================
-       🧱 4️⃣ بناء جسم العقد النهائي
+       4️⃣ بناء جسم العقد النهائي لإرجاعه
     ========================================================= */
     const final = {
       id: contract.id,
       contract_no: contract.contract_no,
+
       office_id: contract.office_id,
       office_name: contract.office_name,
 
@@ -1622,6 +1757,15 @@ router.get("/:id", verifyToken, async (req, res) => {
         national_address: contract.national_address,
       },
 
+      // 👇 بيانات الوسيط brokerage_entities
+      broker: {
+        id: contract.broker_entity_id || null,
+        name: contract.broker_name || null,
+        phone: contract.broker_phone || null,
+        license_no: contract.broker_license_no || null,
+        address: contract.broker_address || null,
+      },
+
       tenants: tenants.rows,
       lessors: lessors.rows,
       units: units.rows,
@@ -1631,7 +1775,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     };
 
     /* =========================================================
-       📝 5️⃣ تسجيل في الـ Audit
+       5️⃣ Audit Log
     ========================================================= */
     await logAudit(pool, {
       user_id: userId,
@@ -1647,6 +1791,7 @@ router.get("/:id", verifyToken, async (req, res) => {
       message: "تم جلب بيانات العقد",
       data: final,
     });
+
   } catch (err) {
     console.error("❌ Contract Details Error:", err);
     res.status(500).json({
@@ -1658,6 +1803,7 @@ router.get("/:id", verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 
 
 

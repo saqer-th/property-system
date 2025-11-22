@@ -63,10 +63,48 @@ router.get("/my", verifyToken, async (req, res) => {
         LEFT JOIN units u ON u.id = e.unit_id
         WHERE 
           COALESCE(c.office_id, p.office_id, e.office_id) IN (
-            SELECT id FROM offices WHERE owner_id = $1
+            SELECT id FROM offices WHERE owner_id = $1 AND is_owner_office = false
             UNION
             SELECT office_id FROM office_users WHERE user_id = $1
           )
+        ORDER BY e.date DESC, e.id DESC;
+      `;
+      params = [userId];
+    }
+    /* =========================================================
+      🏠 2.5️⃣ مالك Self-Managed Owner
+      يرى فقط المصروفات التابعة لمكتبه الخاص
+      ========================================================= */
+    else if (activeRole === "self_office_admin") {
+      query = `
+        SELECT 
+          e.id,
+          e.expense_scope,
+          e.description,
+          e.amount,
+          e.expense_type,
+          e.paid_by,
+          e.on_whom,
+          e.settlement_type,
+          e.settlement_timing,
+          e.date,
+          e.property_id,
+          e.unit_id,
+          e.contract_id,
+          p.property_type AS property_name,
+          u.unit_no,
+          c.contract_no,
+          o.name AS office_name
+        FROM expenses e
+        LEFT JOIN contracts c ON c.id = e.contract_id
+        LEFT JOIN properties p ON p.id = e.property_id
+        LEFT JOIN units u ON u.id = e.unit_id
+        LEFT JOIN offices o ON o.id = COALESCE(c.office_id, p.office_id, e.office_id)
+        WHERE COALESCE(c.office_id, p.office_id, e.office_id) = (
+          SELECT id FROM offices
+          WHERE owner_id = $1 AND is_owner_office = true
+          LIMIT 1
+        )
         ORDER BY e.date DESC, e.id DESC;
       `;
       params = [userId];
@@ -206,7 +244,7 @@ router.post("/", verifyToken, async (req, res) => {
     if (["office", "office_admin"].includes(activeRole)) {
       // المستخدم مكتب أو مشرف مكتب
       const officeRes = await client.query(
-        `SELECT id FROM offices WHERE owner_id=$1
+        `SELECT id FROM offices WHERE owner_id=$1 AND is_owner_office = false
          UNION
          SELECT office_id FROM office_users WHERE user_id=$1
          LIMIT 1;`,

@@ -44,7 +44,7 @@ export default function ExpensesList() {
   const activeRole = user?.activeRole;
 
   // 🧩 صلاحيات
-  const canAdd = ["admin", "office_admin", "office"].includes(activeRole);
+  const canAdd = ["admin", "office_admin", "office", "self_office_admin"].includes(activeRole);
 
   // 📦 تحميل المصروفات
   async function fetchExpenses() {
