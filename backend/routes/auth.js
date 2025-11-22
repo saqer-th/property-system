@@ -243,6 +243,7 @@ router.post("/verify-otp", async (req, res) => {
       {
         id: user.id,
         phone: user.phone,
+        name: user.name, // ⭐ إضافة الاسم هنا
         roles,
         activeRole,
         role_id: activeRoleId,
