@@ -101,6 +101,7 @@ export async function verifyToken(req, res, next) {
     req.user = {
       id: decoded.id,
       phone: decoded.phone,
+      name: decoded.name, // ⭐ الحل هنا
       roles: userRoles,
       activeRole,
       role_id: decoded.role_id,
