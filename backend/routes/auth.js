@@ -370,6 +370,7 @@ router.post("/switch-role", verifyToken, async (req, res) => {
       {
         id: currentUser.id,
         phone: currentUser.phone,
+        name: currentUser.name,
         roles: currentUser.roles,
         activeRole,
         role_id,
@@ -421,6 +422,7 @@ router.get("/me", async (req, res) => {
     const userData = {
       id: decoded.id,
       phone: decoded.phone,
+      name: decoded.name,
       roles: decoded.roles,
       activeRole: decoded.activeRole,
       role_id: decoded.role_id,
@@ -559,6 +561,7 @@ router.post("/register-owner", async (req, res) => {
       {
         id: userId,
         phone: userData.phone,
+        name: userData.name,
         roles: allRoles,
         activeRole: "self_office_admin",
         role_id: roleIdRes.rows[0].id,

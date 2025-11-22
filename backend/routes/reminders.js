@@ -418,8 +418,8 @@ router.post("/send", verifyToken, async (req, res) => {
       end_date: contract.tenancy_end
         ? new Date(contract.tenancy_end).toLocaleDateString("en-GB")
         : "",
-      amount: payment.amount || "",
-      remaining_amount: payment.remaining_amount || "",
+      amount: payment.amount || 0,
+      remaining_amount: payment.remaining_amount || (payment.amount - payment.paid_amount) || "",
       due_date: payment.due_date
         ? new Date(payment.due_date).toLocaleDateString("en-GB")
         : "",
