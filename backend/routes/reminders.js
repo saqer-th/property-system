@@ -17,13 +17,24 @@ const router = express.Router();
 function fillTemplate(template, data) {
   return template.replace(/\{\{(.*?)\}\}/g, (_, key) => {
     const k = key.trim();
+
+    // لو المفتاح غير موجود نهائياً → return ""
+    if (!(k in data)) return "";
+
     const val = data[k];
-    if (!val) return "";
+
+    // null / undefined
+    if (val === null || val === undefined) return "";
+
     if (val instanceof Date) return val.toLocaleDateString("ar-SA");
-    if (typeof val === "number") return val.toLocaleString("ar-SA");
+
+    if (typeof val === "number")
+      return val.toLocaleString("ar-SA", { minimumFractionDigits: 2 });
+
     return String(val);
   });
 }
+
 
 /* =============================
    🔐 Check Contract Access
@@ -353,6 +364,8 @@ router.post("/preview", verifyToken, async (req, res) => {
 router.post("/send", verifyToken, async (req, res) => {
   const { template_id, contract_id } = req.body;
   const sender = req.user;
+
+
 
   try {
     // 🧩 Load template
