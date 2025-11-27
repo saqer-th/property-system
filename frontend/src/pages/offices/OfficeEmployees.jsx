@@ -4,6 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 import { API_URL, API_KEY } from "@/config";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   PlusCircle,
   Loader2,
@@ -13,6 +31,8 @@ import {
   Search,
   Trash2,
   Power,
+  MoreVertical,
+  Users
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -20,18 +40,20 @@ export default function OfficeEmployees({ officeId }) {
   const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [toggling, setToggling] = useState(null);
-  const [deleting, setDeleting] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  
+  // State for actions
   const [search, setSearch] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  
+  // Action loading states
+  const [actionLoading, setActionLoading] = useState(null); // ID of employee being processed
 
-  const canManage =
-    user?.activeRole === "office_admin" || user?.activeRole === "office";
+  const canManage = ["office_admin", "office", "self_office_admin"].includes(user?.activeRole);
 
-  // 📦 جلب الموظفين
+  // 📦 Fetch Employees
   async function fetchEmployees() {
     if (!officeId) return;
     setLoading(true);
@@ -54,12 +76,12 @@ export default function OfficeEmployees({ officeId }) {
     }
   }
 
-  // ➕ إضافة موظف جديد
+  // ➕ Add Employee
   async function handleAddEmployee() {
-    if (!phone.trim()) return toast.error("📱 أدخل رقم الجوال");
-    if (!officeId) return toast.error("⚠️ لم يتم تحديد المكتب بعد");
+    if (!newPhone.trim()) return toast.error("📱 أدخل رقم الجوال");
+    if (!officeId) return toast.error("⚠️ لم يتم تحديد المكتب");
 
-    setAdding(true);
+    setIsAdding(true);
     try {
       const res = await fetch(`${API_URL}/offices/${officeId}/employees`, {
         method: "POST",
@@ -69,29 +91,28 @@ export default function OfficeEmployees({ officeId }) {
           Authorization: `Bearer ${user.token}`,
           "x-active-role": user.activeRole,
         },
-        body: JSON.stringify({ phone, name }),
+        body: JSON.stringify({ phone: newPhone, name: newName }),
       });
 
       const json = await res.json();
       if (!json.success) throw new Error(json.message);
 
       toast.success("✅ تم إضافة الموظف بنجاح");
-      setPhone("");
-      setName("");
-      setDrawerOpen(false);
+      setNewPhone("");
+      setNewName("");
+      setIsAddOpen(false);
       fetchEmployees();
     } catch (err) {
       console.error("❌ Error adding employee:", err);
       toast.error(err.message || "فشل إضافة الموظف");
     } finally {
-      setAdding(false);
+      setIsAdding(false);
     }
   }
 
-  // 🔄 تفعيل/إيقاف موظف
+  // 🔄 Toggle Status
   async function handleToggle(empId, currentStatus) {
-    if (!officeId) return;
-    setToggling(empId);
+    setActionLoading(empId);
     try {
       const res = await fetch(
         `${API_URL}/offices/${officeId}/employees/${empId}/active`,
@@ -114,17 +135,16 @@ export default function OfficeEmployees({ officeId }) {
       fetchEmployees();
     } catch (err) {
       console.error("❌ Toggle error:", err);
-      toast.error(err.message || "فشل تحديث الحالة");
+      toast.error("فشل تحديث الحالة");
     } finally {
-      setToggling(null);
+      setActionLoading(null);
     }
   }
 
-  // ❌ حذف موظف
+  // ❌ Delete Employee
   async function handleDelete(empId) {
-    if (!officeId) return;
     if (!confirm("هل أنت متأكد من حذف هذا الموظف؟")) return;
-    setDeleting(empId);
+    setActionLoading(empId);
     try {
       const res = await fetch(
         `${API_URL}/offices/${officeId}/employees/${empId}`,
@@ -145,13 +165,12 @@ export default function OfficeEmployees({ officeId }) {
       fetchEmployees();
     } catch (err) {
       console.error("❌ Delete error:", err);
-      toast.error(err.message || "فشل حذف الموظف");
+      toast.error("فشل حذف الموظف");
     } finally {
-      setDeleting(null);
+      setActionLoading(null);
     }
   }
 
-  // 🚀 تحميل الموظفين عند توفر المكتب
   useEffect(() => {
     if (officeId) fetchEmployees();
   }, [officeId]);
@@ -164,149 +183,109 @@ export default function OfficeEmployees({ officeId }) {
 
   return (
     <div className="space-y-6">
-      {/* 🔹 العنوان والبحث */}
+      {/* 🔹 Header & Search */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-        <h2 className="text-lg font-bold text-emerald-700 flex items-center gap-2">
-          👥 موظفو المكتب
+        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+          <Users className="text-emerald-600" /> موظفو المكتب
+          <Badge variant="secondary" className="text-xs font-normal bg-gray-100 text-gray-600">
+             {filtered.length}
+          </Badge>
         </h2>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search size={16} className="absolute left-2 top-3 text-gray-400" />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search size={16} className="absolute right-3 top-2.5 text-gray-400" />
             <Input
-              className="pl-8 pr-2 py-2 text-sm"
+              className="pr-9 h-9 text-sm"
               placeholder="بحث بالاسم أو الجوال..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           {canManage && (
-            <Button
-              onClick={() => setDrawerOpen(!drawerOpen)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
-            >
-              <PlusCircle size={16} /> إضافة موظف
+            <Button onClick={() => setIsAddOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-9">
+              <PlusCircle size={16} className="ml-1" /> إضافة
             </Button>
           )}
         </div>
       </div>
 
-      {/* 🔹 نموذج الإضافة */}
-      {drawerOpen && (
-        <Card className="p-4 border border-emerald-200 bg-emerald-50 rounded-2xl animate-fadeIn">
-          <div className="grid md:grid-cols-3 gap-4">
-            <Input
-              placeholder="اسم الموظف"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <Input
-              placeholder="رقم الجوال 05XXXXXXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <Button
-              onClick={handleAddEmployee}
-              disabled={adding}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {adding ? <Loader2 className="animate-spin w-4 h-4" /> : "إضافة"}
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* 🔹 جدول الموظفين */}
-      <Card className="border rounded-2xl shadow-md overflow-hidden">
-        <CardHeader className="bg-emerald-50 border-b border-emerald-100">
-          <CardTitle className="text-emerald-700 text-base font-semibold">
-            قائمة الموظفين ({filtered.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* 🔹 Employees Table */}
+      <Card className="border border-gray-200 shadow-sm overflow-hidden">
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-              <Loader2 className="animate-spin mb-2" size={22} />
+              <Loader2 className="animate-spin mb-2 text-emerald-600" size={24} />
               جاري تحميل الموظفين...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <ShieldAlert className="mx-auto mb-2 text-gray-400" size={26} />
-              لا يوجد موظفون حاليًا
+            <div className="text-center py-12 text-gray-500 flex flex-col items-center">
+              <div className="bg-gray-50 p-4 rounded-full mb-3">
+                 <Users className="text-gray-300" size={32} />
+              </div>
+              <p>لا يوجد موظفين حالياً</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg">
-              <table className="w-full text-sm text-gray-700 border-collapse">
-                <thead className="bg-emerald-100 text-emerald-700">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-right">
+                <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                   <tr>
-                    <th className="p-3 text-start w-1/3">الموظف</th>
-                    <th className="p-3 text-start">الدور</th>
-                    <th className="p-3 text-start">الحالة</th>
-                    <th className="p-3 text-start">الإجراءات</th>
+                    <th className="px-6 py-3">الموظف</th>
+                    <th className="px-6 py-3">الدور</th>
+                    <th className="px-6 py-3">الحالة</th>
+                    <th className="px-6 py-3 w-10"></th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100">
                   {filtered.map((emp) => (
-                    <tr
-                      key={emp.user_id}
-                      className="border-b hover:bg-emerald-50 transition-all"
-                    >
-                      <td className="p-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                          <div className="flex items-center gap-2">
-                            <User size={16} className="text-emerald-600" />
-                            <span className="font-medium">{emp.name || "—"}</span>
-                          </div>
-                          <div className="flex items-center text-gray-500 text-sm mt-1 sm:mt-0">
-                            <Phone size={14} className="mr-1 text-gray-400" />
-                            {emp.phone}
+                    <tr key={emp.user_id} className="group hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 bg-emerald-50 border border-emerald-100">
+                            <AvatarFallback className="text-emerald-700 font-bold text-xs">
+                               {emp.name ? emp.name.charAt(0) : <User size={16}/>}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                             <p className="font-medium text-gray-900">{emp.name || "مستخدم"}</p>
+                             <p className="text-xs text-gray-500 font-mono dir-ltr text-right">{emp.phone}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="p-3">
-                        {emp.role === "employee"
-                          ? "موظف"
-                          : emp.role === "manager"
-                          ? "مدير"
-                          : emp.role}
+                      <td className="px-6 py-4">
+                        <Badge variant="outline" className="font-normal text-gray-600 bg-white border-gray-200">
+                           {emp.role === "manager" ? "مدير" : "موظف"}
+                        </Badge>
                       </td>
-                      <td className="p-3">
+                      <td className="px-6 py-4">
                         {emp.is_active ? (
-                          <span className="text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-full text-xs">
-                            نشط
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> نشط
                           </span>
                         ) : (
-                          <span className="text-gray-500 bg-gray-100 px-2 py-1 rounded-full text-xs">
-                            موقوف
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> موقوف
                           </span>
                         )}
                       </td>
-                      <td className="p-3 flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggle(emp.user_id, emp.is_active)}
-                          disabled={toggling === emp.user_id}
-                          className="border-emerald-300"
-                        >
-                          {toggling === emp.user_id ? (
-                            <Loader2 className="animate-spin w-4 h-4" />
-                          ) : (
-                            <Power size={14} className="text-emerald-700" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(emp.user_id)}
-                          disabled={deleting === emp.user_id}
-                        >
-                          {deleting === emp.user_id ? (
-                            <Loader2 className="animate-spin w-4 h-4" />
-                          ) : (
-                            <Trash2 size={14} />
-                          )}
-                        </Button>
+                      <td className="px-6 py-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900">
+                              {actionLoading === emp.user_id ? <Loader2 className="animate-spin" size={16}/> : <MoreVertical size={16} />}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuLabel>إجراءات</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleToggle(emp.user_id, emp.is_active)} className="cursor-pointer">
+                              <Power size={14} className="ml-2" /> {emp.is_active ? "إيقاف الحساب" : "تفعيل الحساب"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(emp.user_id)} className="text-red-600 focus:text-red-600 cursor-pointer">
+                              <Trash2 size={14} className="ml-2" /> حذف الموظف
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -316,6 +295,43 @@ export default function OfficeEmployees({ officeId }) {
           )}
         </CardContent>
       </Card>
+
+      {/* ➕ Add Employee Dialog */}
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>إضافة موظف جديد</DialogTitle>
+            <DialogDescription>
+               سيتمكن الموظف من الوصول إلى لوحة تحكم المكتب بناءً على الصلاحيات الممنوحة.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium leading-none">اسم الموظف</label>
+              <Input
+                placeholder="مثال: أحمد محمد"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium leading-none">رقم الجوال <span className="text-red-500">*</span></label>
+              <Input
+                placeholder="05XXXXXXXX"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsAddOpen(false)}>إلغاء</Button>
+            <Button onClick={handleAddEmployee} disabled={isAdding} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {isAdding ? <Loader2 className="animate-spin ml-2" size={16} /> : <PlusCircle className="ml-2" size={16} />}
+              إضافة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

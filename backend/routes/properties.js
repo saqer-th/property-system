@@ -92,6 +92,24 @@ router.get("/my", verifyToken, async (req, res) => {
       `;
       params = [phone];
     }
+    /* 👤 المالك يرى العقارات المرتبطة بعقوده */
+    else if (activeRole === "owner" || activeRole === "مالك") {
+      query = `
+        SELECT DISTINCT 
+          p.id, p.title_deed_no, p.property_type, p.property_usage,
+          p.num_units, p.national_address, p.city, p.contract_id,
+          o.name AS office_name
+        FROM properties p
+        JOIN contracts c ON c.property_id = p.id
+        JOIN contract_parties cp ON cp.contract_id = c.id
+        JOIN parties pt ON pt.id = cp.party_id
+        LEFT JOIN offices o ON o.id = p.office_id
+        WHERE LOWER(TRIM(cp.role)) IN ('lessor','مالك')
+          AND REPLACE(REPLACE(pt.phone,'+966','0'),' ','') = REPLACE(REPLACE($1,'+966','0'),' ','')
+        ORDER BY p.id DESC;
+      `;
+      params = [phone];
+    }
 
     /* 🚫 غير مصرح له */
     else {

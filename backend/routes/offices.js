@@ -28,51 +28,69 @@ router.get("/my", verifyToken, async (req, res) => {
   const user = req.user;
 
   try {
-    // 🧩 إذا المستخدم أدمن، رجّع كل المكاتب
+    // 🔥 1) Admin → يرجّع كل المكاتب
     if (user.activeRole === "admin") {
-      const { rows } = await pool.query(
-        `SELECT id, name, owner_name, phone, email, status, created_at
-         FROM offices
-         ORDER BY created_at DESC`
-      );
+      const { rows } = await pool.query(`
+        SELECT id, name, owner_name, phone, email, status, created_at,commercial_reg,license_no,address
+        FROM offices
+        ORDER BY created_at DESC
+      `);
       return res.json({ success: true, data: rows });
     }
 
-    // 🧩 إذا المستخدم مالك المكتب
-    const owned = await pool.query(
-      `SELECT id, name, owner_name, phone, email, status, created_at
-       FROM offices
-       WHERE owner_id=$1
-       ORDER BY created_at DESC
-       LIMIT 1`,
+    // 🔥 2) المكتب الرئيسي (is_owner_office = false)
+    const mainOffice = await pool.query(
+      `
+      SELECT id, name, owner_name, phone, email, status, created_at, commercial_reg, license_no, address
+      FROM offices
+      WHERE owner_id = $1 AND is_owner_office = false
+      LIMIT 1
+      `,
       [user.id]
     );
 
-    if (owned.rows.length) {
-      return res.json({ success: true, data: owned.rows[0] });
+    if (mainOffice.rows.length) {
+      return res.json({ success: true, data: mainOffice.rows[0] });
     }
 
-    // 🧩 إذا المستخدم موظف أو مشرف في المكتب
-    const joined = await pool.query(
-      `SELECT o.id, o.name, o.owner_name, o.phone, o.email, o.status, o.created_at,
-              ou.role_in_office
-       FROM office_users ou
-       JOIN offices o ON o.id = ou.office_id
-       WHERE ou.user_id=$1
-       ORDER BY o.created_at DESC
-       LIMIT 1`,
+    // 🔥 3) إذا المستخدم موظف → نرجع أول مكتب يعمل فيه
+    const staffOffice = await pool.query(
+      `
+      SELECT o.id, o.name, o.owner_name, o.phone, o.email, o.status, o.created_at, o.commercial_reg, o.license_no, o.address
+      FROM office_users ou
+      JOIN offices o ON o.id = ou.office_id
+      WHERE ou.user_id = $1
+      ORDER BY o.created_at DESC
+      LIMIT 1
+      `,
       [user.id]
     );
 
-    if (joined.rows.length) {
-      return res.json({ success: true, data: joined.rows[0] });
+    if (staffOffice.rows.length) {
+      return res.json({ success: true, data: staffOffice.rows[0] });
     }
 
-    // ❌ لا يملك ولا يعمل بأي مكتب
-    res.status(404).json({
+    // 🔥 4) إذا لا مكتب رئيسي ولا موظف → نرجّع المكتب الشخصي (is_owner_office = true)
+    const privateOffice = await pool.query(
+      `
+      SELECT id, name, owner_name, phone, email, status, created_at, commercial_reg, license_no, address
+      FROM offices
+      WHERE owner_id = $1 AND is_owner_office = true
+      LIMIT 1
+      `,
+      [user.id]
+    );
+
+    if (privateOffice.rows.length) {
+      return res.json({ success: true, data: privateOffice.rows[0] });
+    }
+
+    // ❌ بدون مكاتب نهائياً
+    return res.status(404).json({
       success: false,
       message: "❌ لا يوجد مكتب مرتبط بهذا الحساب",
     });
+
   } catch (err) {
     console.error("❌ Error fetching my office:", err);
     res.status(500).json({
@@ -82,6 +100,7 @@ router.get("/my", verifyToken, async (req, res) => {
     });
   }
 });
+
 /* =========================================================
    🏢 تسجيل مكتب جديد (حتى لو المستخدم موجود)
    ========================================================= */
@@ -266,11 +285,20 @@ router.get("/:id", verifyToken, async (req, res) => {
     if (userRole !== "admin") {
       const { rows: checkAccess } = await pool.query(
         `
-        SELECT 1
-        FROM offices o
-        LEFT JOIN office_users ou ON ou.office_id = o.id
-        WHERE o.id = $1 AND (o.owner_id = $2 OR ou.user_id = $2)
-        LIMIT 1
+  SELECT 1
+    FROM (
+      SELECT office_id AS id 
+      FROM office_users 
+      WHERE user_id = $2
+      
+      UNION
+      
+      SELECT id 
+      FROM offices 
+      WHERE owner_id = $2 AND is_owner_office = false
+    ) AS allowed
+    WHERE allowed.id = $1
+    LIMIT 1
         `,
         [officeId, userId]
       );

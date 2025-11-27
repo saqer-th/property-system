@@ -365,6 +365,8 @@ router.post("/send", verifyToken, async (req, res) => {
   const { template_id, contract_id } = req.body;
   const sender = req.user;
 
+  
+
 
 
   try {
@@ -382,6 +384,7 @@ router.post("/send", verifyToken, async (req, res) => {
       sender.activeRole,
       sender.phone
     );
+    
 
     if (!allowed)
       return res.status(403).json({
@@ -448,6 +451,7 @@ router.post("/send", verifyToken, async (req, res) => {
     let finalMessage =
       filled +
       `\n\n📩 أُرسلت من مكتب ${contract.office_name} بواسطة ${sender.name}`;
+      
 
     // 🔄 Fix escaped \n → actual newlines
     finalMessage = finalMessage.replace(/\\n/g, "\n");
@@ -458,6 +462,7 @@ router.post("/send", verifyToken, async (req, res) => {
 
     try {
       await sendWhatsAppMessage(contract.tenant_phone, finalMessage);
+      
     } catch (err) {
       status = "failed";
       error_message = err.message;

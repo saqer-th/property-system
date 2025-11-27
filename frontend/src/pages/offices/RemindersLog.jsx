@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Loader2,
   Bell,
@@ -11,8 +14,14 @@ import {
   Send,
   Eye,
   MessageSquare,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  Smartphone,
+  Calendar,
+  User
 } from "lucide-react";
-import toast from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { API_URL, API_KEY } from "@/config";
 import { useAuth } from "@/context/AuthContext";
 
@@ -28,485 +37,355 @@ import {
 export default function RemindersPage() {
   const { user } = useAuth();
 
-  // Templates
+  // State
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
-
-  // Search contracts
   const [contracts, setContracts] = useState([]);
   const [filteredContracts, setFilteredContracts] = useState([]);
   const [contractSearch, setContractSearch] = useState("");
   const [selectedContract, setSelectedContract] = useState(null);
-
-  // Preview
+  
+  // UI State
   const [preview, setPreview] = useState("");
-  const [previewData, setPreviewData] = useState(null);
-
-  // Logs
   const [logs, setLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [logSearch, setLogSearch] = useState("");
-
-  // Loading
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [loadingContracts, setLoadingContracts] = useState(false);
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  
+  // Loading States
+  const [loadingData, setLoadingData] = useState(false);
   const [sending, setSending] = useState(false);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
 
   // Modal
   const [openModal, setOpenModal] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
 
-  /* =============================
-     Fetch Templates
-  ============================== */
-  async function fetchTemplates() {
-    setLoadingTemplates(true);
-    try {
-      const res = await fetch(`${API_URL}/reminders/templates`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-          "x-api-key": API_KEY,
-          "x-active-role": user.activeRole,
-        },
-      });
-
-      const data = await res.json();
-      setTemplates(data.templates || []);
-    } catch {
-      toast.error("فشل تحميل القوالب");
-    }
-    setLoadingTemplates(false);
+  // 🚀 Initial Fetch
+  async function refreshAll() {
+    setLoadingData(true);
+    await Promise.all([fetchTemplates(), fetchContracts(), fetchLogs()]);
+    setLoadingData(false);
   }
 
-  /* =============================
-     Fetch Contracts
-  ============================== */
+  useEffect(() => {
+    refreshAll();
+  }, []);
+
+  // --- Fetchers ---
+  async function fetchTemplates() {
+    try {
+      const res = await fetch(`${API_URL}/reminders/templates`, {
+        headers: { Authorization: `Bearer ${user.token}`, "x-api-key": API_KEY, "x-active-role": user.activeRole },
+      });
+      const data = await res.json();
+      setTemplates(data.templates || []);
+    } catch { toast.error("فشل تحميل القوالب"); }
+  }
+
   async function fetchContracts() {
-    setLoadingContracts(true);
     try {
       const res = await fetch(`${API_URL}/contracts/my`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-          "x-active-role": user.activeRole,
-        },
+        headers: { Authorization: `Bearer ${user.token}`, "x-api-key": API_KEY, "x-active-role": user.activeRole },
       });
-
       const data = await res.json();
       setContracts(data.data || []);
       setFilteredContracts(data.data || []);
-    } catch {
-      toast.error("فشل تحميل العقود");
-    }
-    setLoadingContracts(false);
+    } catch { toast.error("فشل تحميل العقود"); }
   }
 
-  /* =============================
-     Fetch Logs
-  ============================== */
   async function fetchLogs() {
-    setLoadingLogs(true);
     try {
       const res = await fetch(`${API_URL}/reminders/logs`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-          "x-api-key": API_KEY,
-          "x-active-role": user.activeRole,
-        },
+        headers: { Authorization: `Bearer ${user.token}`, "x-api-key": API_KEY, "x-active-role": user.activeRole },
       });
-
       const data = await res.json();
       setLogs(data.data || []);
       setFilteredLogs(data.data || []);
-    } catch {
-      toast.error("فشل تحميل السجل");
-    }
-    setLoadingLogs(false);
+    } catch { toast.error("فشل تحميل السجل"); }
   }
 
-  /* =============================
-     Init
-  ============================== */
+  // --- Search Logic ---
   useEffect(() => {
-    fetchTemplates();
-    fetchContracts();
-    fetchLogs();
-  }, []);
-
-  /* =============================
-     Search contracts
-  ============================== */
-  useEffect(() => {
-    if (!contractSearch.trim()) {
-      setFilteredContracts(contracts);
-    } else {
+    if (!contractSearch.trim()) setFilteredContracts(contracts);
+    else {
       const q = contractSearch.toLowerCase();
-      setFilteredContracts(
-        contracts.filter(
-          (c) =>
-            c.contract_no?.toLowerCase().includes(q) ||
-            c.tenant_name?.toLowerCase().includes(q) ||
-            c.property_name?.toLowerCase().includes(q)
-        )
-      );
+      setFilteredContracts(contracts.filter(c => 
+        c.contract_no?.toLowerCase().includes(q) || 
+        c.tenant_name?.toLowerCase().includes(q) || 
+        c.property_name?.toLowerCase().includes(q)
+      ));
     }
   }, [contractSearch, contracts]);
 
-  /* =============================
-     Search logs
-  ============================== */
   useEffect(() => {
-    if (!logSearch.trim()) {
-      setFilteredLogs(logs);
-    } else {
+    if (!logSearch.trim()) setFilteredLogs(logs);
+    else {
       const q = logSearch.toLowerCase();
-      setFilteredLogs(
-        logs.filter(
-          (l) =>
-            l.target_phone?.includes(q) ||
-            l.reminder_name?.toLowerCase().includes(q) ||
-            l.message_sent?.toLowerCase().includes(q)
-        )
-      );
+      setFilteredLogs(logs.filter(l => 
+        l.target_phone?.includes(q) || 
+        l.reminder_name?.toLowerCase().includes(q) ||
+        l.message_sent?.toLowerCase().includes(q)
+      ));
     }
   }, [logSearch, logs]);
 
-  /* =============================
-     Preview
-  ============================== */
+  // --- Actions ---
   async function handlePreview() {
-    if (!selectedTemplate || !selectedContract)
-      return toast.error("يرجى اختيار القالب والعقد");
-
+    if (!selectedTemplate || !selectedContract) return toast.error("يرجى اختيار القالب والعقد");
+    
+    setGeneratingPreview(true);
     try {
       const res = await fetch(`${API_URL}/reminders/preview`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
-          "x-api-key": API_KEY,
-          "x-active-role": user.activeRole,
-        },
-        body: JSON.stringify({
-          template_id: selectedTemplate,
-          contract_id: selectedContract.id,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}`, "x-api-key": API_KEY, "x-active-role": user.activeRole },
+        body: JSON.stringify({ template_id: selectedTemplate, contract_id: selectedContract.id }),
       });
-
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
-
-      // FIX MESSAGE — remove escaped characters
+      
       let clean = data.preview || "";
-
-      // يحول \n إلى سطر جديد
-      clean = clean.replace(/\\n/g, "\n");
-
-      // يحذف علامات التنصيص الزائدة
-      clean = clean.replace(/^"|"$/g, "");
-
-      // يحول \" إلى "
-      clean = clean.replace(/\\"/g, '"');
-
+      clean = clean.replace(/\\n/g, "\n").replace(/^"|"$/g, "").replace(/\\"/g, '"');
       setPreview(clean);
-      setPreviewData(data.contract);
-      toast.success("تم إنشاء المعاينة");
-    } catch {
-      toast.error("فشل إنشاء المعاينة");
-    }
+    } catch { toast.error("فشل المعاينة"); }
+    setGeneratingPreview(false);
   }
 
-  /* =============================
-     Send reminder
-  ============================== */
   async function handleSend() {
-    if (!selectedTemplate || !selectedContract)
-      return toast.error("يرجى اختيار القالب والعقد");
-
+    if (!selectedTemplate || !selectedContract) return toast.error("يرجى اختيار القالب والعقد");
     setSending(true);
-
     try {
       const res = await fetch(`${API_URL}/reminders/send`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
-          "x-api-key": API_KEY,
-          "x-active-role": user.activeRole,
-        },
-        body: JSON.stringify({
-          template_id: selectedTemplate,
-          contract_id: selectedContract.id,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}`, "x-api-key": API_KEY, "x-active-role": user.activeRole },
+        body: JSON.stringify({ template_id: selectedTemplate, contract_id: selectedContract.id }),
       });
-
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
-
-      toast.success("تم إرسال التذكير");
+      
+      toast.success("تم إرسال التذكير بنجاح");
       setPreview("");
-      setPreviewData(null);
       setSelectedContract(null);
       setContractSearch("");
-
       fetchLogs();
-    } catch {
-      toast.error("فشل إرسال التذكير");
-    }
-
+    } catch { toast.error("فشل الإرسال"); }
     setSending(false);
   }
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-8">
-
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-          <h1 className="text-2xl font-bold text-emerald-700 flex items-center gap-2">
-            <Bell className="w-6 h-6" />
-            التذكيرات والإشعارات
-          </h1>
-
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
-            onClick={() => {
-              fetchTemplates();
-              fetchContracts();
-              fetchLogs();
-            }}
-          >
-            <RefreshCcw size={16} />
-            تحديث البيانات
+      <Toaster position="top-center" />
+      <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen" dir="rtl">
+        
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Bell className="text-emerald-600" /> مركز التذكيرات
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">إرسال تذكيرات يدوية للمستأجرين ومراجعة السجل.</p>
+          </div>
+          <Button variant="outline" onClick={refreshAll} disabled={loadingData}>
+            {loadingData ? <Loader2 className="animate-spin" size={16}/> : <RefreshCcw size={16} />}
           </Button>
         </div>
 
-        {/* CREATE REMINDER */}
-        <Card className="border shadow-sm rounded-xl">
-          <CardHeader>
-            <CardTitle className="text-emerald-700">
-              إنشاء وإرسال تذكير
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-              {/* TEMPLATE SELECT */}
-              <div>
-                <label className="text-sm text-gray-600">القالب</label>
-                <select
-                  className="w-full p-2 border rounded-md text-sm focus:ring-2 focus:ring-emerald-400"
-                  value={selectedTemplate}
-                  onChange={(e) => setSelectedTemplate(e.target.value)}
-                >
-                  <option value="">— اختر القالب —</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* CONTRACT SEARCH */}
-              <div className="relative">
-                <label className="text-sm text-gray-600">العقد</label>
-
-                <Input
-                  placeholder="اكتب للبحث… مثال: رقم العقد أو اسم المستأجر"
-                  value={contractSearch}
-                  onChange={(e) => {
-                    setContractSearch(e.target.value);
-                    setSelectedContract(null);
-                  }}
-                  className="focus:ring-2 focus:ring-emerald-400"
-                />
-
-                {contractSearch && filteredContracts.length > 0 && (
-                  <div className="absolute bg-white border shadow-lg rounded-md w-full mt-1 max-h-60 overflow-y-auto z-20">
-                    {filteredContracts.map((c) => (
-                      <div
-                        key={c.id}
-                        onClick={() => {
-                          setSelectedContract(c);
-                          setContractSearch(`#${c.contract_no} — ${c.tenant_name}`);
-                        }}
-                        className="p-2 text-sm cursor-pointer hover:bg-emerald-50"
-                      >
-                        عقد #{c.contract_no} — {c.tenant_name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* BUTTONS */}
-              <div className="flex gap-2 items-end">
-                <Button
-                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white"
-                  onClick={handlePreview}
-                >
-                  <Eye size={16} className="mr-1" /> معاينة
-                </Button>
-
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={handleSend}
-                  disabled={sending}
-                >
-                  {sending ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Send size={16} className="mr-1" />
-                  )}
-                  إرسال
-                </Button>
-              </div>
-            </div>
-
-            {/* PREVIEW BLOCK */}
-            {preview && (
-              <Card className="p-4 bg-emerald-50 border rounded-lg">
-                <CardTitle className="text-emerald-700 mb-2 flex items-center gap-2">
-                  <MessageSquare size={18} />
-                  معاينة الرسالة
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* 🟢 Left: Composer (5 Columns) */}
+          <div className="lg:col-span-5 space-y-6">
+            <Card className="border-0 shadow-sm bg-white h-full">
+              <CardHeader className="bg-gray-50/50 border-b pb-4">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Send size={18} className="text-blue-600"/> إنشاء رسالة جديدة
                 </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                
+                {/* Step 1: Template */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">1. اختر القالب</label>
+                  <select 
+                    className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    value={selectedTemplate}
+                    onChange={(e) => { setSelectedTemplate(e.target.value); setPreview(""); }}
+                  >
+                    <option value="">-- اختر قالب الرسالة --</option>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
 
-                <p className="whitespace-pre-line text-gray-800 text-md leading-7">
-                  {preview}
-                </p>
-              </Card>
-            )}
-          </CardContent>
-        </Card>
+                {/* Step 2: Contract Search */}
+                <div className="space-y-2 relative">
+                  <label className="text-sm font-medium text-gray-700">2. اختر العقد (المستلم)</label>
+                  <div className="relative">
+                    <Search className="absolute right-3 top-3 text-gray-400" size={16} />
+                    <Input 
+                      placeholder="ابحث برقم العقد أو اسم المستأجر..." 
+                      className="pr-10"
+                      value={contractSearch}
+                      onChange={(e) => { setContractSearch(e.target.value); setSelectedContract(null); setPreview(""); }}
+                    />
+                  </div>
+                  
+                  {/* Search Results Dropdown */}
+                  {contractSearch && !selectedContract && filteredContracts.length > 0 && (
+                    <div className="absolute w-full bg-white border shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto z-20">
+                      {filteredContracts.map(c => (
+                        <div 
+                          key={c.id} 
+                          className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0 transition-colors"
+                          onClick={() => { setSelectedContract(c); setContractSearch(`${c.tenant_name} - #${c.contract_no}`); }}
+                        >
+                          <p className="font-medium text-gray-900 text-sm">{c.tenant_name}</p>
+                          <p className="text-xs text-gray-500">عقد #{c.contract_no} • {c.property_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-        {/* LOGS */}
-        <Card className="border shadow-sm rounded-xl">
-          <CardHeader>
-            <div className="flex flex-col md:flex-row justify-between">
-              <CardTitle className="text-emerald-700">
-                سجل الإشعارات ({filteredLogs.length})
-              </CardTitle>
+                {/* Step 3: Preview Box */}
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center">
+                      <label className="text-sm font-medium text-gray-700">3. معاينة الرسالة</label>
+                      {!preview && selectedContract && selectedTemplate && (
+                        <Button size="sm" variant="ghost" onClick={handlePreview} disabled={generatingPreview} className="text-blue-600 h-auto p-0 hover:bg-transparent">
+                           {generatingPreview ? <Loader2 className="animate-spin ml-1" size={12}/> : <Eye size={14} className="ml-1"/>} 
+                           توليد المعاينة
+                        </Button>
+                      )}
+                   </div>
+                   
+                   <div className={`min-h-[120px] p-4 rounded-xl border text-sm leading-relaxed transition-all ${preview ? "bg-blue-50 border-blue-100 text-gray-800" : "bg-gray-50 border-dashed border-gray-200 text-gray-400 flex items-center justify-center"}`}>
+                      {preview ? preview : "ستظهر معاينة الرسالة هنا بعد اختيار القالب والعقد..."}
+                   </div>
+                </div>
 
-              <div className="relative mt-2 md:mt-0">
-                <Search className="absolute right-3 top-3 text-gray-400" size={16} />
-                <Input
-                  placeholder="بحث..."
-                  value={logSearch}
-                  onChange={(e) => setLogSearch(e.target.value)}
-                  className="pr-10 max-w-xs focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-            </div>
-          </CardHeader>
+                <Button onClick={handleSend} disabled={sending || !preview} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-6 text-md shadow-lg shadow-emerald-100 transition-all">
+                   {sending ? <Loader2 className="animate-spin ml-2"/> : <Send className="ml-2" size={18} />}
+                   إرسال التذكير الآن
+                </Button>
 
-          <CardContent>
-            {loadingLogs ? (
-              <div className="text-center py-10">
-                <Loader2 className="animate-spin mx-auto text-gray-600" />
-              </div>
-            ) : filteredLogs.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">لا توجد إشعارات</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100 text-gray-700 sticky top-0">
-                    <tr>
-                      <th className="p-3 text-start">القالب</th>
-                      <th className="p-3 text-start">رقم الجوال</th>
-                      <th className="p-3 text-start w-1/2">الرسالة</th>
-                      <th className="p-3 text-start">التاريخ</th>
-                      <th className="p-3 text-start">الحالة</th>
-                    </tr>
-                  </thead>
+              </CardContent>
+            </Card>
+          </div>
 
-                  <tbody>
-                    {filteredLogs.map((log) => (
-                      <tr
-                        key={log.id}
-                        className="border-b hover:bg-emerald-50 cursor-pointer"
-                        onClick={() => {
-                          setSelectedLog(log);
-                          setOpenModal(true);
-                        }}
-                      >
-                        <td className="p-3">{log.reminder_name}</td>
-                        <td className="p-3">{log.target_phone}</td>
-                        <td className="p-3 truncate max-w-sm">
-                          {log.message_sent}
-                        </td>
-                        <td className="p-3 text-gray-600">
-                          {new Date(log.created_at).toLocaleString("en-GB")}
-                        </td>
-                        <td className="p-3">
-                          {log.status === "sent" ? (
-                            <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs">
-                              تم الإرسال
-                            </span>
-                          ) : (
-                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded-md text-xs">
-                              فشل
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {/* 🟠 Right: Logs (7 Columns) */}
+          <div className="lg:col-span-7">
+            <Card className="border-0 shadow-sm bg-white h-full flex flex-col">
+              <CardHeader className="bg-gray-50/50 border-b pb-4">
+                <div className="flex justify-between items-center">
+                   <CardTitle className="text-base font-semibold flex items-center gap-2">
+                     <MessageSquare size={18} className="text-purple-600"/> سجل الرسائل المرسلة
+                   </CardTitle>
+                   <div className="relative w-48 sm:w-64">
+                      <Search className="absolute right-3 top-2.5 text-gray-400" size={14} />
+                      <Input 
+                        placeholder="بحث في السجل..." 
+                        className="pr-9 h-9 text-sm bg-white"
+                        value={logSearch}
+                        onChange={(e) => setLogSearch(e.target.value)}
+                      />
+                   </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 flex-1">
+                <ScrollArea className="h-[600px]">
+                  {filteredLogs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                       <MessageSquare size={40} className="mb-2 opacity-20" />
+                       <p>لا توجد سجلات مطابقة</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {filteredLogs.map((log) => (
+                        <div 
+                          key={log.id} 
+                          className="p-4 hover:bg-gray-50/80 transition-colors cursor-pointer group"
+                          onClick={() => { setSelectedLog(log); setOpenModal(true); }}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                             <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="bg-white font-normal text-gray-600 border-gray-200">
+                                   {log.reminder_name}
+                                </Badge>
+                                <span className="text-xs text-gray-400 flex items-center dir-ltr">
+                                   <Smartphone size={10} className="mr-1"/> {log.target_phone}
+                                </span>
+                             </div>
+                             <span className="text-[10px] text-gray-400">{new Date(log.created_at).toLocaleString("en-GB")}</span>
+                          </div>
+                          
+                          <p className="text-sm text-gray-700 line-clamp-2 leading-relaxed mb-2 group-hover:text-gray-900">
+                             {log.message_sent}
+                          </p>
 
-        {/* MODAL — Message Details */}
+                          <div className="flex justify-between items-center">
+                             {log.status === "sent" ? (
+                                <span className="text-xs flex items-center text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">
+                                   <CheckCircle2 size={10} className="ml-1"/> تم الإرسال
+                                </span>
+                             ) : (
+                                <span className="text-xs flex items-center text-red-600 font-medium bg-red-50 px-2 py-0.5 rounded-full">
+                                   <XCircle size={10} className="ml-1"/> فشل
+                                </span>
+                             )}
+                             <Button size="sm" variant="ghost" className="h-6 text-xs text-gray-400 hover:text-blue-600 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                عرض التفاصيل <Eye size={12} className="mr-1"/>
+                             </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+        </div>
+
+        {/* 🔎 Message Details Modal */}
         <Dialog open={openModal} onOpenChange={setOpenModal}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="sm:max-w-md" dir="rtl">
             <DialogHeader>
-              <DialogTitle className="text-emerald-700 text-lg">
-                تفاصيل الرسالة
+              <DialogTitle className="flex items-center gap-2 text-gray-800">
+                 <FileText size={18} className="text-blue-600" /> تفاصيل الرسالة
               </DialogTitle>
               <DialogDescription>
-                عرض كامل لمحتوى الرسالة كما تم إرسالها
+                 نسخة من الرسالة التي تم إرسالها للنظام.
               </DialogDescription>
             </DialogHeader>
-
+            
             {selectedLog && (
-              <div className="space-y-3 text-sm">
-                <p>
-                  <strong>القالب:</strong> {selectedLog.reminder_name}
-                </p>
-                <p>
-                  <strong>رقم الجوال:</strong> {selectedLog.target_phone}
-                </p>
-                <p>
-                  <strong>التاريخ:</strong>{" "}
-                  {new Date(selectedLog.created_at).toLocaleString("en-GB")}
-                </p>
-
-                <p>
-                  <strong>الحالة:</strong>{" "}
-                  {selectedLog.status === "sent" ? (
-                    <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs">
-                      تم الإرسال
-                    </span>
-                  ) : (
-                    <span className="bg-red-100 text-red-700 px-2 py-1 rounded-md text-xs">
-                      فشل
-                    </span>
-                  )}
-                </p>
-
-                <div>
-                  <strong>نص الرسالة:</strong>
-                  <div className="bg-gray-100 p-3 rounded-md whitespace-pre-line mt-1 leading-7">
-                    {selectedLog.message_sent}
+               <div className="space-y-4 py-2">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                     <div className="space-y-1">
+                        <label className="text-xs text-gray-500">المستلم</label>
+                        <div className="font-mono text-gray-800 bg-gray-50 px-2 py-1 rounded border w-fit">{selectedLog.target_phone}</div>
+                     </div>
+                     <div className="space-y-1">
+                        <label className="text-xs text-gray-500">التاريخ</label>
+                        <div className="text-gray-800">{new Date(selectedLog.created_at).toLocaleDateString("en-GB")}</div>
+                     </div>
                   </div>
-                </div>
-              </div>
+
+                  <div className="space-y-1">
+                     <label className="text-xs text-gray-500">نوع القالب</label>
+                     <div className="font-medium text-gray-800">{selectedLog.reminder_name}</div>
+                  </div>
+
+                  <div className="space-y-1">
+                     <label className="text-xs text-gray-500">نص الرسالة</label>
+                     <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 text-sm text-gray-700 leading-7 whitespace-pre-line">
+                        {selectedLog.message_sent}
+                     </div>
+                  </div>
+               </div>
             )}
           </DialogContent>
         </Dialog>
+
       </div>
     </DashboardLayout>
   );

@@ -1,34 +1,70 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Loader2,
   RefreshCw,
   Clock,
   Eye,
-  X,
-  FileDiff,
+  Search,
+  Activity,
+  PlusCircle,
+  Edit3,
+  Trash2,
+  Filter,
+  Server,
+  Globe,
+  User
 } from "lucide-react";
-import toast from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { API_URL, API_KEY } from "@/config";
 import { useAuth } from "@/context/AuthContext";
 
+// --- Diff Helper ---
+const DataViewer = ({ data, title, type }) => {
+  if (!data || Object.keys(data).length === 0) return null;
+
+  const bgClass = type === 'old' ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100';
+  const textClass = type === 'old' ? 'text-red-800' : 'text-green-800';
+
+  return (
+    <div className={`flex-1 rounded-lg border ${bgClass} overflow-hidden`}>
+      <div className={`px-3 py-2 border-b ${type === 'old' ? 'border-red-200 bg-red-100/50' : 'border-green-200 bg-green-100/50'} text-xs font-bold uppercase tracking-wide ${textClass}`}>
+        {title}
+      </div>
+      <div className="p-3 overflow-x-auto">
+        <pre className="text-xs font-mono text-gray-700 whitespace-pre-wrap">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
 export default function AuditTab() {
-  const [logs, setLogs] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [selectedLog, setSelectedLog] = useState(null);
   const { user } = useAuth();
   const activeRole = user?.activeRole;
 
-  // ✅ تحميل السجل عند أول تشغيل
-  useEffect(() => {
-    fetchAudit();
-  }, []);
+  const [logs, setLogs] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  const [search, setSearch] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [loading, setLoading] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  // 1. Fetch Data
   async function fetchAudit() {
     setLoading(true);
     try {
@@ -40,178 +76,172 @@ export default function AuditTab() {
         },
       });
       const json = await res.json();
-
-      if (!json.success) {
-        toast.error("🚫 لا تملك صلاحية عرض السجل أو حدث خطأ");
-        return;
-      }
-
+      if (!json.success) throw new Error(json.message);
+      
       const data = json.data || [];
       setLogs(data);
       setFiltered(data);
     } catch (err) {
-      console.error("❌ Error fetching audit:", err);
-      toast.error("❌ فشل في تحميل سجل العمليات");
+      toast.error("فشل تحميل سجل العمليات");
     } finally {
       setLoading(false);
     }
   }
 
-  // 🔍 البحث حسب المستخدم / العملية / الكيان / الوصف
   useEffect(() => {
+    fetchAudit();
+  }, []);
+
+  // 2. Filter Logic
+  useEffect(() => {
+    let results = logs;
     const term = search.toLowerCase();
-    setFiltered(
-      logs.filter(
-        (log) =>
-          log.user_name?.toLowerCase().includes(term) ||
-          log.action?.toLowerCase().includes(term) ||
-          log.table_name?.toLowerCase().includes(term) ||
-          log.description?.toLowerCase().includes(term)
-      )
-    );
-  }, [search, logs]);
 
-  // 🎨 ألوان العمليات
-  const actionColors = {
-    INSERT: "bg-green-500 text-white",
-    UPDATE: "bg-blue-500 text-white",
-    DELETE: "bg-red-500 text-white",
-  };
-
-  // 🧩 مقارنة بيانات قبل وبعد (إظهار الفروقات)
-  function renderDiff(oldData, newData) {
-    if (!oldData && !newData)
-      return <p className="text-gray-400">لا توجد بيانات</p>;
-
-    let oldObj = {};
-    let newObj = {};
-    try {
-      oldObj = typeof oldData === "string" ? JSON.parse(oldData || "{}") : oldData || {};
-      newObj = typeof newData === "string" ? JSON.parse(newData || "{}") : newData || {};
-    } catch (err) {
-      console.warn("⚠️ Error parsing JSON:", err);
+    // Text Search
+    if (term) {
+      results = results.filter(log => 
+        log.user_name?.toLowerCase().includes(term) ||
+        log.table_name?.toLowerCase().includes(term) ||
+        log.description?.toLowerCase().includes(term)
+      );
     }
 
-    const allKeys = [...new Set([...Object.keys(oldObj), ...Object.keys(newObj)])];
-    return (
-      <table className="w-full text-sm border border-gray-200 mt-2">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="border p-1">الحقل</th>
-            <th className="border p-1">قبل</th>
-            <th className="border p-1">بعد</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allKeys.map((key) => {
-            const oldVal = oldObj[key];
-            const newVal = newObj[key];
-            const changed = JSON.stringify(oldVal) !== JSON.stringify(newVal);
-            return (
-              <tr key={key} className={changed ? "bg-yellow-50" : ""}>
-                <td className="border p-1 font-medium">{key}</td>
-                <td className="border p-1 text-gray-500">{String(oldVal ?? "-")}</td>
-                <td className="border p-1 text-gray-700 font-semibold">
-                  {String(newVal ?? "-")}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    );
-  }
+    // Action Filter
+    if (actionFilter !== "all") {
+      results = results.filter(log => log.action === actionFilter);
+    }
+
+    setFiltered(results);
+  }, [search, actionFilter, logs]);
+
+  // 3. Helpers
+  const parseJSON = (str) => {
+    try {
+      return typeof str === 'string' ? JSON.parse(str) : str;
+    } catch { return {}; }
+  };
+
+  const openDetails = (log) => {
+    setSelectedLog({
+      ...log,
+      parsedOld: parseJSON(log.old_data),
+      parsedNew: parseJSON(log.new_data)
+    });
+    setIsDialogOpen(true);
+  };
+
+  const getActionConfig = (action) => {
+    switch (action) {
+      case 'INSERT': return { label: "إضافة", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: PlusCircle };
+      case 'UPDATE': return { label: "تعديل", color: "bg-blue-100 text-blue-700 border-blue-200", icon: Edit3 };
+      case 'DELETE': return { label: "حذف", color: "bg-red-100 text-red-700 border-red-200", icon: Trash2 };
+      default: return { label: action, color: "bg-gray-100 text-gray-700", icon: Activity };
+    }
+  };
 
   return (
-    <>
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span className="text-lg font-semibold">🧾 سجل العمليات (Audit Log)</span>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="🔍 بحث بالاسم، العملية أو الكيان"
-                className="w-72"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <Button variant="outline" onClick={fetchAudit}>
-                <RefreshCw size={16} className="mr-1" /> تحديث
-              </Button>
+    <div className="space-y-6">
+      
+      {/* 🎛️ Controls & Table */}
+      <Card className="border shadow-sm overflow-hidden">
+        <CardHeader className="bg-white border-b pb-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+               <Activity className="text-gray-500" size={20}/> سجل العمليات (Audit Logs)
+            </CardTitle>
+            
+            <div className="flex items-center gap-2 w-full md:w-auto">
+               {/* Action Filter */}
+               <div className="relative">
+                  <select 
+                    className="h-10 pl-3 pr-8 rounded-lg border border-gray-300 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer"
+                    value={actionFilter}
+                    onChange={(e) => setActionFilter(e.target.value)}
+                  >
+                     <option value="all">جميع العمليات</option>
+                     <option value="INSERT">➕ إضافة</option>
+                     <option value="UPDATE">✏️ تعديل</option>
+                     <option value="DELETE">🗑️ حذف</option>
+                  </select>
+                  <Filter size={14} className="absolute top-3 left-3 text-gray-400 pointer-events-none" />
+               </div>
+
+               {/* Search */}
+               <div className="relative flex-1 md:w-64">
+                  <Search className="absolute top-3 right-3 text-gray-400" size={16} />
+                  <Input 
+                    placeholder="بحث بالمستخدم، الجدول..." 
+                    className="pr-9 h-10"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+               </div>
+
+               {/* Refresh */}
+               <Button variant="outline" size="icon" onClick={fetchAudit} disabled={loading}>
+                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+               </Button>
             </div>
-          </CardTitle>
+          </div>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
-            <div className="flex justify-center py-10 text-gray-500">
-              <Loader2 className="animate-spin mr-2" /> جاري التحميل...
-            </div>
+             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                <Loader2 className="animate-spin text-emerald-600 mb-2" size={32} />
+                <p>جاري تحليل السجلات...</p>
+             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-center py-6 text-gray-500">لا توجد سجلات حالياً</p>
+             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                <div className="bg-gray-50 p-4 rounded-full mb-3">
+                   <Activity size={32} className="text-gray-300" />
+                </div>
+                <p>لا توجد سجلات مطابقة</p>
+             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm text-center border border-gray-200">
-                <thead className="bg-gray-100 text-gray-700">
+              <table className="w-full text-sm text-right">
+                <thead className="bg-gray-50 text-gray-600 font-medium">
                   <tr>
-                    <th className="p-2 border">#</th>
-                    <th className="p-2 border">المستخدم</th>
-                    <th className="p-2 border">العملية</th>
-                    <th className="p-2 border">الكيان</th>
-                    <th className="p-2 border">التفاصيل</th>
-                    <th className="p-2 border">الوقت</th>
-                    <th className="p-2 border">عرض</th>
+                    <th className="p-4">العملية</th>
+                    <th className="p-4">المستخدم</th>
+                    <th className="p-4">الكيان / الجدول</th>
+                    <th className="p-4">الوصف</th>
+                    <th className="p-4 text-center">الوقت</th>
+                    <th className="p-4 text-center">التفاصيل</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filtered.map((log, i) => (
-                    <tr
-                      key={log.id}
-                      className="border-b hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="p-2 border">{i + 1}</td>
-                      <td className="p-2 border font-medium text-gray-700">
-                        {log.user_name || "مستخدم"}
-                      </td>
-                      <td className="p-2 border">
-                        <Badge
-                          className={`${actionColors[log.action] || "bg-gray-400 text-white"} px-3 py-1`}
-                        >
-                          {log.action === "INSERT"
-                            ? "إضافة"
-                            : log.action === "UPDATE"
-                            ? "تعديل"
-                            : log.action === "DELETE"
-                            ? "حذف"
-                            : log.action}
-                        </Badge>
-                      </td>
-                      <td className="p-2 border text-gray-700">
-                        {log.table_name || "-"}
-                      </td>
-                      <td className="p-2 border text-gray-600 text-left px-3 max-w-md truncate">
-                        {log.description || "-"}
-                      </td>
-                      <td className="p-2 border text-gray-500 text-sm">
-                        <div className="flex items-center justify-center gap-1">
-                          <Clock size={14} />
-                          {log.created_at
-                            ? new Date(log.created_at).toLocaleString("ar-SA")
-                            : "-"}
-                        </div>
-                      </td>
-                      <td className="p-2 border">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedLog(log)}
-                          className="flex items-center gap-1"
-                        >
-                          <Eye size={15} /> عرض
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.map((log) => {
+                    const conf = getActionConfig(log.action);
+                    const Icon = conf.icon;
+                    return (
+                      <tr key={log.id} className="hover:bg-gray-50/60 transition-colors cursor-pointer" onClick={() => openDetails(log)}>
+                        <td className="p-4">
+                           <Badge variant="outline" className={`font-normal ${conf.color} flex items-center gap-1 w-fit`}>
+                              <Icon size={12} /> {conf.label}
+                           </Badge>
+                        </td>
+                        <td className="p-4 font-medium text-gray-900">
+                           {log.user_name || "System"}
+                        </td>
+                        <td className="p-4 font-mono text-xs text-gray-600">
+                           {log.table_name}
+                        </td>
+                        <td className="p-4 text-gray-500 max-w-xs truncate">
+                           {log.description}
+                        </td>
+                        <td className="p-4 text-center text-xs text-gray-400 dir-ltr">
+                           {new Date(log.created_at).toLocaleString('en-GB')}
+                        </td>
+                        <td className="p-4 text-center">
+                           <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-blue-600">
+                              <Eye size={16} />
+                           </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -219,47 +249,60 @@ export default function AuditTab() {
         </CardContent>
       </Card>
 
-      {/* 🪟 نافذة التفاصيل */}
-      {selectedLog && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-11/12 max-w-4xl p-6 relative overflow-y-auto max-h-[90vh]">
-            <button
-              onClick={() => setSelectedLog(null)}
-              className="absolute top-3 right-3 text-gray-400 hover:text-red-500"
-            >
-              <X size={20} />
-            </button>
-
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <FileDiff className="text-blue-500" /> تفاصيل العملية
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                {selectedLog.description || "-"}
-              </p>
+      {/* 🔎 Details Modal */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" dir="rtl">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+               <Badge variant="outline" className={`${getActionConfig(selectedLog?.action).color} px-3 py-1`}>
+                  {getActionConfig(selectedLog?.action).label}
+               </Badge>
+               <DialogTitle className="text-lg">تفاصيل العملية</DialogTitle>
             </div>
+            <DialogDescription>
+               {selectedLog?.description}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 p-1">
+             <div className="flex flex-col md:flex-row gap-4 my-4">
+                {/* Show OLD data only if UPDATE or DELETE */}
+                {(selectedLog?.action === 'UPDATE' || selectedLog?.action === 'DELETE') && (
+                   <DataViewer data={selectedLog?.parsedOld} title="قبل التعديل (Old Data)" type="old" />
+                )}
+                
+                {/* Show NEW data only if INSERT or UPDATE */}
+                {(selectedLog?.action === 'INSERT' || selectedLog?.action === 'UPDATE') && (
+                   <DataViewer data={selectedLog?.parsedNew} title="بعد التعديل (New Data)" type="new" />
+                )}
+             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <h3 className="font-medium text-gray-700 mb-1">📂 البيانات قبل التعديل</h3>
-                {renderDiff(selectedLog.old_data, "{}")}
-              </div>
-              <div>
-                <h3 className="font-medium text-gray-700 mb-1">🆕 البيانات بعد التعديل</h3>
-                {renderDiff("{}", selectedLog.new_data)}
-              </div>
-            </div>
+             <div className="bg-gray-50 p-4 rounded-lg border grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-gray-600 mt-4">
+                <div className="space-y-1">
+                   <span className="flex items-center gap-1 font-medium text-gray-900"><User size={12}/> المستخدم</span>
+                   <p>{selectedLog?.user_name} (ID: {selectedLog?.user_id})</p>
+                </div>
+                <div className="space-y-1">
+                   <span className="flex items-center gap-1 font-medium text-gray-900"><Clock size={12}/> التوقيت</span>
+                   <p className="dir-ltr text-right">{selectedLog && new Date(selectedLog.created_at).toLocaleString()}</p>
+                </div>
+                <div className="space-y-1">
+                   <span className="flex items-center gap-1 font-medium text-gray-900"><Globe size={12}/> IP Address</span>
+                   <p className="font-mono">{selectedLog?.ip_address || "Unknown"}</p>
+                </div>
+                <div className="space-y-1">
+                   <span className="flex items-center gap-1 font-medium text-gray-900"><Server size={12}/> Endpoint</span>
+                   <p className="font-mono truncate" title={selectedLog?.endpoint}>{selectedLog?.endpoint || "-"}</p>
+                </div>
+             </div>
+          </ScrollArea>
 
-            <div className="mt-4 text-sm text-gray-500">
-              <p>👤 المستخدم: <strong>{selectedLog.user_name || "مستخدم"}</strong></p>
-              <p>📁 الكيان: <strong>{selectedLog.table_name}</strong></p>
-              <p>🕒 الوقت: {new Date(selectedLog.created_at).toLocaleString("ar-SA")}</p>
-              <p>🌐 IP: {selectedLog.ip_address}</p>
-              <p>🔗 المسار: {selectedLog.endpoint}</p>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+          <DialogFooter>
+            <Button onClick={() => setIsDialogOpen(false)}>إغلاق</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+    </div>
   );
 }

@@ -1012,8 +1012,53 @@ export async function getMaintenanceReport(officeId) {
 /* =========================================================
    📌 8) OCCUPANCY REPORT (نسبة الإشغال)
 ========================================================= */
-export async function getOccupancyReport(userId) {
-  // 1️⃣ حدد المكتب الخاص بالمستخدم (owner or employee)
+export async function getOccupancyReport(userId, role) {
+
+  /* =====================================================
+     1️⃣ إذا المستخدم Admin → ارجع كل شيء بدون فلترة
+  ===================================================== */
+  if (role === "admin") {
+
+    const units = await pool.query(`
+      SELECT 
+        u.id,
+        u.unit_no,
+        u.unit_type,
+        p.title_deed_no AS property_name,
+        p.property_type,
+        p.city,
+        (
+          SELECT COUNT(*)
+          FROM contract_units cu
+          JOIN contracts c ON c.id = cu.contract_id
+          WHERE cu.unit_id = u.id
+          AND c.tenancy_start <= NOW()
+          AND c.tenancy_end >= NOW()
+        ) AS occupied
+      FROM units u
+      JOIN properties p ON p.id = u.property_id
+      ORDER BY p.id, u.unit_no::int
+    `);
+
+    const total = units.rowCount;
+    const occupied = units.rows.filter((u) => u.occupied > 0).length;
+    const empty = total - occupied;
+
+    return {
+      total_units: total,
+      occupied_units: occupied,
+      empty_units: empty,
+      occupancy_rate: total ? ((occupied / total) * 100).toFixed(2) : 0,
+      units: units.rows.map((u) => ({
+        ...u,
+        occupied: u.occupied > 0 ? 1 : 0,
+      })),
+    };
+  }
+
+  /* =====================================================
+     2️⃣ المستخدم ليس Admin → اجلب المكتب الخاص به
+  ===================================================== */
   const officeQuery = `
     SELECT id FROM offices WHERE owner_id = $1
     UNION
@@ -1021,6 +1066,8 @@ export async function getOccupancyReport(userId) {
   `;
 
   const officeResult = await pool.query(officeQuery, [userId]);
+
+  // إذا ما عنده مكتب مسجل
   if (officeResult.rowCount === 0) {
     return {
       total_units: 0,
@@ -1033,7 +1080,9 @@ export async function getOccupancyReport(userId) {
 
   const officeId = officeResult.rows[0].id;
 
-  // 2️⃣ جلب الوحدات وحالة الإشغال
+  /* =====================================================
+     3️⃣ جلب الوحدات المرتبطة بالمكتب فقط
+  ===================================================== */
   const units = await pool.query(
     `
       SELECT 
@@ -1074,6 +1123,7 @@ export async function getOccupancyReport(userId) {
     })),
   };
 }
+
 
 /* =========================================================
    📌 9) PROFIT REPORT (صافي الربح)

@@ -1828,13 +1828,20 @@ function buildTable(rows, columns, dir) {
 ========================================================= */
 router.get("/occupancy/summary", verifyToken, async (req, res) => {
   try {
-    const data = await getOccupancyReport(req.user.id); // JSON summary only
-    return res.json(data);
+    const user = req.user;
+
+    const data = await getOccupancyReport(
+      user.id,
+      user.activeRole // ← هنا نرسل دور المستخدم
+    );
+
+    return res.json({ success: true, data });
   } catch (err) {
     console.error("❌ Occupancy summary error:", err);
     res.status(500).json({ success: false, message: "Error loading summary" });
   }
 });
+
 /* ============================================================
     💰 PROFIT SUMMARY (FINAL VERSION)
     - Payments (Income)

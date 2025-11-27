@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/config";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -13,130 +17,187 @@ import {
   FileText,
   Receipt,
   Home,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Download,
+  Filter,
+  PieChart as PieChartIcon,
+  ArrowRight,
+  ArrowLeft,
+  Wallet
 } from "lucide-react";
-
 import { useTranslation } from "react-i18next";
-
 import {
   ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
+  YAxis,
   Tooltip,
   Legend,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts";
+
+// --- Constants ---
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
+const FINANCIAL_COLORS = { income: '#10b981', expense: '#ef4444', profit: '#3b82f6' };
+
+const StatCard = ({ title, value, subtext, icon, colorClass, bgClass, loading }) => (
+  <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
+    <div className="space-y-1">
+      <p className="text-sm text-gray-500 font-medium">{title}</p>
+      {loading ? (
+        <Skeleton className="h-8 w-24" />
+      ) : (
+        <h3 className="text-2xl font-bold text-gray-900 tracking-tight">{value}</h3>
+      )}
+      {subtext && !loading && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+    </div>
+    <div className={`p-3 rounded-lg ${bgClass} ${colorClass}`}>
+      {icon}
+    </div>
+  </div>
+);
 
 export default function ProfitReport() {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const dir = i18n.language === "ar" ? "rtl" : "ltr";
 
+  // Filter State
   const [properties, setProperties] = useState([]);
   const [units, setUnits] = useState([]);
-
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedUnit, setSelectedUnit] = useState(null);
-
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
-  const [officeRate, setOfficeRate] = useState(0);
+  const [officeRate, setOfficeRate] = useState(2.5); // Default 2.5%
   const [rateType, setRateType] = useState("income");
 
+  // Data State
   const [loading, setLoading] = useState(false);
+  const [loadingProps, setLoadingProps] = useState(true);
   const [result, setResult] = useState(null);
 
   /* =======================
-     Load properties
+      Load Properties
   ======================= */
   useEffect(() => {
     async function load() {
-      const res = await fetch(`${API_URL}/properties/my`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-          "x-active-role": user.activeRole,
-        },
-      });
-      const json = await res.json();
-      setProperties(json.data || json || []);
-    }
-    load();
-  }, []);
-
-  /* =======================
-     Load units
-  ======================= */
-  useEffect(() => {
-    async function loadUnits() {
-      if (!selectedProperty) return;
-
-      const res = await fetch(
-        `${API_URL}/units/by-property/${selectedProperty.id}`,
-        {
+      setLoadingProps(true);
+      try {
+        const res = await fetch(`${API_URL}/properties/my`, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             "x-active-role": user.activeRole,
           },
-        }
-      );
-      const json = await res.json();
-      setUnits(json.data || []);
+        });
+        const json = await res.json();
+        setProperties(json.data || json || []);
+      } catch (err) { console.error(err); }
+      setLoadingProps(false);
+    }
+    load();
+  }, [user.token, user.activeRole]);
+
+  /* =======================
+      Load Units
+  ======================= */
+  useEffect(() => {
+    async function loadUnits() {
+      if (!selectedProperty) {
+        setUnits([]);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `${API_URL}/units/by-property/${selectedProperty.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+              "x-active-role": user.activeRole,
+            },
+          }
+        );
+        const json = await res.json();
+        setUnits(json.data || []);
+      } catch (err) { console.error(err); }
     }
     loadUnits();
-  }, [selectedProperty]);
+  }, [selectedProperty, user.token, user.activeRole]);
 
   /* =======================
-     Build Query URL
-  ======================= */
-  const buildQueryURL = () => {
-    const params = new URLSearchParams();
-
-    if (selectedProperty?.id) params.append("property_id", selectedProperty.id);
-    if (selectedUnit?.id) params.append("unit_id", selectedUnit.id);
-
-    if (fromDate) params.append("from", fromDate);
-    if (toDate) params.append("to", toDate);
-
-    params.append("rate", officeRate || 0);
-    params.append("rate_type", rateType);
-
-    return `${API_URL}/reports/summary/profit?` + params.toString();
-  };
-
-  /* =======================
-     Load preview
+      Load Preview
   ======================= */
   const loadPreview = async () => {
     setLoading(true);
-
     try {
-      const url = buildQueryURL();
-      const res = await fetch(url, {
+      const params = new URLSearchParams();
+      if (selectedProperty?.id) params.append("property_id", selectedProperty.id);
+      if (selectedUnit?.id) params.append("unit_id", selectedUnit.id);
+      if (fromDate) params.append("from", fromDate);
+      if (toDate) params.append("to", toDate);
+      params.append("rate", officeRate || 0);
+      params.append("rate_type", rateType);
+
+      const res = await fetch(`${API_URL}/reports/summary/profit?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
           "x-active-role": user.activeRole,
         },
       });
-
-      setResult(await res.json());
+      const data = await res.json();
+      setResult(data);
     } catch (err) {
       console.error("ERR:", err);
     }
-
     setLoading(false);
   };
 
   /* =======================
-     Export PDF
+      Analytics Processing
+  ======================= */
+  const analytics = useMemo(() => {
+    if (!result) return null;
+
+    const totalIncome = Number(result.total_collected || 0);
+    const totalExpenses = Number(result.total_expenses || 0);
+    const netProfit = Number(result.net_profit || 0);
+    const officeFee = Number(result.office_fee || 0);
+    
+    // Profit Margin
+    const margin = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : 0;
+
+    // Chart Data: Financial Overview
+    const financialChart = [
+      { name: t("income"), amount: totalIncome, fill: FINANCIAL_COLORS.income },
+      { name: t("expenses"), amount: totalExpenses, fill: FINANCIAL_COLORS.expense },
+      { name: t("netProfit"), amount: netProfit, fill: FINANCIAL_COLORS.profit },
+    ];
+
+    // Chart Data: Expense Breakdown
+    const expenseData = (result.expense_rows || []).map((row, index) => ({
+      name: row.description || row.expense_type || "Other",
+      value: Number(row.amount),
+      fill: COLORS[index % COLORS.length]
+    })).filter(i => i.value > 0);
+
+    return { totalIncome, totalExpenses, netProfit, officeFee, margin, financialChart, expenseData };
+  }, [result, t]);
+
+  /* =======================
+      PDF Export
   ======================= */
   const generatePDF = () => {
     const params = new URLSearchParams();
-
     if (selectedProperty?.id) params.append("property_id", selectedProperty.id);
     if (selectedUnit?.id) params.append("unit_id", selectedUnit.id);
     if (fromDate) params.append("from", fromDate);
     if (toDate) params.append("to", toDate);
-
     params.append("rate", officeRate || 0);
     params.append("rate_type", rateType);
     params.append("auth", user.token);
@@ -148,258 +209,297 @@ export default function ProfitReport() {
 
   return (
     <DashboardLayout>
-      <div dir={dir} className="p-6 space-y-8">
+      <div dir={dir} className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen bg-gray-50/30">
 
-        <h1 className="text-3xl font-bold text-amber-600 flex items-center gap-2">
-          <BarChart2 size={30} /> {t("profitSummary")}
-        </h1>
+        {/* --- Header --- */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+           <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                 <BarChart2 className="text-amber-600" /> {t("profitSummary")}
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                {t("profitSummarySub", "تحليل الأرباح، المصروفات، وصافي الدخل للفترة المحددة")}
+              </p>
+           </div>
+        </div>
 
-        {/* Filters */}
-        <Card className="p-6 rounded-xl shadow space-y-6">
-          
-          {/* Property */}
-          <div>
-            <label className="font-medium text-gray-700 flex items-center gap-2">
-              <Home size={18} /> {t("chooseProperty")}
-            </label>
+        {/* --- Filters --- */}
+        <Card className="border-0 shadow-sm ring-1 ring-gray-100 bg-white">
+           <CardContent className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                 
+                 {/* Property & Unit */}
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("property")}</label>
+                    <Select 
+                       onValueChange={(val) => {
+                          setSelectedProperty(properties.find(p => p.id.toString() === val));
+                          setSelectedUnit(null);
+                       }}
+                    >
+                       <SelectTrigger className="bg-gray-50 border-gray-200">
+                          <SelectValue placeholder={t("selectProperty")} />
+                       </SelectTrigger>
+                       <SelectContent>
+                          {properties.map(p => (
+                             <SelectItem key={p.id} value={p.id.toString()}>
+                                {p.property_type || p.title_deed_no}
+                             </SelectItem>
+                          ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
 
-            <select
-              className="w-full border p-2 rounded-md mt-1"
-              onChange={(e) =>
-                setSelectedProperty(
-                  properties.find((p) => p.id == e.target.value)
-                )
-              }
-            >
-              <option value="">{t("selectProperty")}</option>
-              {properties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.property_name || p.title_deed_no}
-                </option>
-              ))}
-            </select>
-          </div>
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("unit")}</label>
+                    <Select 
+                       disabled={!selectedProperty}
+                       onValueChange={(val) => setSelectedUnit(units.find(u => u.id.toString() === val))}
+                    >
+                       <SelectTrigger className="bg-gray-50 border-gray-200">
+                          <SelectValue placeholder={t("allUnits")} />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="all">{t("allUnits")}</SelectItem>
+                          {units.map(u => (
+                             <SelectItem key={u.id} value={u.id.toString()}>{u.unit_no}</SelectItem>
+                          ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
 
-          {/* Units */}
-          {selectedProperty && (
-            <div>
-              <label className="font-medium text-gray-700 flex items-center gap-2">
-                <Building2 size={18} /> {t("chooseUnit")}
-              </label>
+                 {/* Date Range */}
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("fromDate")}</label>
+                    <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="bg-gray-50 border-gray-200"/>
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("toDate")}</label>
+                    <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="bg-gray-50 border-gray-200"/>
+                 </div>
+              </div>
 
-              <select
-                className="w-full border p-2 rounded-md mt-1"
-                onChange={(e) =>
-                  setSelectedUnit(units.find((u) => u.id == e.target.value))
-                }
-              >
-                <option value="">{t("allUnits")}</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.unit_no}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+              {/* Advanced Options (Office Rate) */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end border-t border-gray-100 pt-4">
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("officeRate")} (%)</label>
+                    <div className="relative">
+                       <Percent className="absolute left-3 top-2.5 text-gray-400" size={14}/>
+                       <Input 
+                          type="number" 
+                          value={officeRate} 
+                          onChange={(e) => setOfficeRate(e.target.value)} 
+                          className="pl-9 bg-gray-50 border-gray-200"
+                       />
+                    </div>
+                 </div>
+                 
+                 <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">{t("rateType")}</label>
+                    <Select value={rateType} onValueChange={setRateType}>
+                       <SelectTrigger className="bg-gray-50 border-gray-200">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="income">{t("percentageOfIncome")}</SelectItem>
+                          <SelectItem value="profit">{t("percentageOfProfit")}</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
 
-          {/* Dates */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="font-medium text-gray-700 flex items-center gap-2">
-                <Calendar size={18} /> {t("fromDate")}
-              </label>
-              <input
-                type="date"
-                value={fromDate}
-                className="w-full border p-2 rounded-md"
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700 flex items-center gap-2">
-                <Calendar size={18} /> {t("toDate")}
-              </label>
-              <input
-                type="date"
-                value={toDate}
-                className="w-full border p-2 rounded-md"
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Office Rate */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="font-medium text-gray-700 flex items-center gap-2">
-                <Percent size={18} /> {t("officeRate")}
-              </label>
-              <input
-                type="number"
-                value={officeRate}
-                className="w-full border p-2 rounded-md"
-                onChange={(e) => setOfficeRate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-gray-700">{t("rateType")}</label>
-              <select
-                className="w-full border p-2 rounded-md"
-                value={rateType}
-                onChange={(e) => setRateType(e.target.value)}
-              >
-                <option value="income">{t("percentageOfIncome")}</option>
-                <option value="profit">{t("percentageOfProfit")}</option>
-              </select>
-            </div>
-          </div>
-
-          <Button
-            className="bg-amber-600 text-white hover:bg-amber-700 px-5"
-            onClick={loadPreview}
-          >
-            {loading ? <Loader2 className="animate-spin" /> : t("previewReport")}
-          </Button>
+                 <div className="md:col-span-2 flex gap-3">
+                    <Button onClick={loadPreview} disabled={loading} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-100">
+                       {loading ? <Loader2 className="animate-spin mr-2" size={18}/> : <BarChart2 className="mr-2" size={18}/>}
+                       {t("previewReport")}
+                    </Button>
+                    <Button onClick={generatePDF} disabled={!result} variant="outline" className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50">
+                       <Download className="mr-2" size={18}/> PDF
+                    </Button>
+                 </div>
+              </div>
+           </CardContent>
         </Card>
 
-        {/* Result */}
-        {result && !loading && (
-          <PreviewResult result={result} t={t} generatePDF={generatePDF} />
+        {/* --- Content Area --- */}
+        {loading ? (
+           <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                 {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-xl"/>)}
+              </div>
+              <Skeleton className="h-[400px] rounded-xl"/>
+           </div>
+        ) : result && analytics ? (
+           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              
+              {/* 1. Key Financials */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                 <StatCard 
+                    title={t("totalIncome")} 
+                    value={analytics.totalIncome.toLocaleString()} 
+                    icon={<TrendingUp size={20}/>} 
+                    colorClass="text-emerald-600" 
+                    bgClass="bg-emerald-50"
+                 />
+                 <StatCard 
+                    title={t("totalExpenses")} 
+                    value={analytics.totalExpenses.toLocaleString()} 
+                    icon={<TrendingDown size={20}/>} 
+                    colorClass="text-red-600" 
+                    bgClass="bg-red-50"
+                 />
+                 <StatCard 
+                    title={t("netProfit")} 
+                    value={analytics.netProfit.toLocaleString()} 
+                    subtext={`هامش ربح: ${analytics.margin}%`}
+                    icon={<Wallet size={20}/>} 
+                    colorClass="text-blue-600" 
+                    bgClass="bg-blue-50"
+                 />
+                 <StatCard 
+                    title={t("officeFee")} 
+                    value={analytics.officeFee.toLocaleString()} 
+                    subtext={`${officeRate}% نسبة المكتب`}
+                    icon={<Building2 size={20}/>} 
+                    colorClass="text-amber-600" 
+                    bgClass="bg-amber-50"
+                 />
+              </div>
+
+              {/* 2. Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Financial Overview Bar Chart */}
+                 <Card className="lg:col-span-2 border-0 shadow-sm ring-1 ring-gray-100">
+                    <CardHeader>
+                       <CardTitle className="text-base flex items-center gap-2">
+                          <BarChart2 size={18} className="text-gray-500"/> {t("financialOverview")}
+                       </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analytics.financialChart}>
+                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0"/>
+                             <XAxis dataKey="name" tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                             <YAxis tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                             <Tooltip cursor={{fill: '#f9fafb'}} contentStyle={{borderRadius: '8px'}} />
+                             <Bar dataKey="amount" radius={[4, 4, 0, 0]} barSize={50}>
+                                {analytics.financialChart.map((entry, index) => (
+                                   <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                             </Bar>
+                          </BarChart>
+                       </ResponsiveContainer>
+                    </CardContent>
+                 </Card>
+
+                 {/* Expense Breakdown Pie Chart */}
+                 <Card className="border-0 shadow-sm ring-1 ring-gray-100">
+                    <CardHeader>
+                       <CardTitle className="text-base flex items-center gap-2">
+                          <PieChartIcon size={18} className="text-gray-500"/> {t("expensesBreakdown", "توزيع المصروفات")}
+                       </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                             <Pie
+                                data={analytics.expenseData}
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                             >
+                                {analytics.expenseData.map((entry, index) => (
+                                   <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                             </Pie>
+                             <Tooltip contentStyle={{borderRadius: '8px'}} />
+                             <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
+                          </PieChart>
+                       </ResponsiveContainer>
+                    </CardContent>
+                 </Card>
+              </div>
+
+              {/* 3. Detailed Statement Tables */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 
+                 {/* Income Table */}
+                 <Card className="border-0 shadow-sm ring-1 ring-gray-100 overflow-hidden">
+                    <CardHeader className="bg-white border-b border-gray-100 pb-3">
+                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-700">
+                          <TrendingUp size={16}/> {t("incomeStatement", "تفاصيل الإيرادات")}
+                       </CardTitle>
+                    </CardHeader>
+                    <div className="overflow-x-auto max-h-[300px]">
+                       <table className="w-full text-xs text-right">
+                          <thead className="bg-emerald-50 text-emerald-800 sticky top-0">
+                             <tr>
+                                <th className="p-3">البند</th>
+                                <th className="p-3">المبلغ</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                             {result.income_rows?.map((row, i) => (
+                                <tr key={i} className="hover:bg-emerald-50/30">
+                                   <td className="p-3 font-medium text-gray-700">{row.description || t("rentRevenue")}</td>
+                                   <td className="p-3 font-bold text-gray-900">{Number(row.amount).toLocaleString()}</td>
+                                </tr>
+                             ))}
+                             {result.income_rows?.length === 0 && (
+                                <tr><td colSpan="2" className="p-4 text-center text-gray-400">لا توجد إيرادات</td></tr>
+                             )}
+                          </tbody>
+                       </table>
+                    </div>
+                 </Card>
+
+                 {/* Expense Table */}
+                 <Card className="border-0 shadow-sm ring-1 ring-gray-100 overflow-hidden">
+                    <CardHeader className="bg-white border-b border-gray-100 pb-3">
+                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-red-700">
+                          <TrendingDown size={16}/> {t("expenseStatement", "تفاصيل المصروفات")}
+                       </CardTitle>
+                    </CardHeader>
+                    <div className="overflow-x-auto max-h-[300px]">
+                       <table className="w-full text-xs text-right">
+                          <thead className="bg-red-50 text-red-800 sticky top-0">
+                             <tr>
+                                <th className="p-3">البند</th>
+                                <th className="p-3">المبلغ</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                             {result.expense_rows?.map((row, i) => (
+                                <tr key={i} className="hover:bg-red-50/30">
+                                   <td className="p-3 font-medium text-gray-700">{row.description || row.expense_type}</td>
+                                   <td className="p-3 font-bold text-gray-900">{Number(row.amount).toLocaleString()}</td>
+                                </tr>
+                             ))}
+                             {result.expense_rows?.length === 0 && (
+                                <tr><td colSpan="2" className="p-4 text-center text-gray-400">لا توجد مصروفات</td></tr>
+                             )}
+                          </tbody>
+                       </table>
+                    </div>
+                 </Card>
+
+              </div>
+
+           </div>
+        ) : (
+           // Empty State
+           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-dashed border-gray-200 text-gray-400">
+              <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-4">
+                 <BarChart2 size={40} className="text-amber-300"/>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-700">تحديد المعايير</h3>
+              <p className="max-w-xs text-center text-sm mt-1">
+                 الرجاء اختيار العقار وتحديد الفترة الزمنية لعرض تقرير الأرباح والخسائر.
+              </p>
+           </div>
         )}
+
       </div>
     </DashboardLayout>
-  );
-}
-
-/* ===========================
-   Preview Component
-=========================== */
-function PreviewResult({ result, t, generatePDF }) {
-  return (
-    <div className="space-y-10">
-      <SummaryRow result={result} t={t} />
-      <ChartBlock result={result} t={t} />
-      <DataBlock title={t("paymentsList")} icon={<BarChart2 size={20} />} rows={result.payments} />
-      <DataBlock title={t("incomeItems")} icon={<BarChart2 size={20} />} rows={result.income_rows} />
-      <DataBlock title={t("expenseItems")} icon={<FileText size={20} />} rows={result.expense_rows} />
-      <DataBlock title={t("receiptsList")} icon={<Receipt size={20} />} rows={result.receipt_rows} />
-      
-      
-      <div className="text-center">
-        <Button
-          onClick={generatePDF}
-          className="bg-amber-600 text-white hover:bg-amber-700 px-8 py-3 text-lg"
-        >
-          {t("generatePDF")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ===========================
-   Summary 
-=========================== */
-function SummaryRow({ result, t }) {
-  return (
-    <Card className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4 bg-white rounded-xl shadow">
-      {/* هنا total_collected بدل total_income */}
-      <SummaryCard color="green" value={result.total_collected} label={t("totalIncome")} />
-      <SummaryCard color="red" value={result.total_expenses} label={t("totalExpenses")} />
-      <SummaryCard color="blue" value={result.net_profit} label={t("netProfit")} />
-      <SummaryCard color="amber" value={result.office_fee} label={t("officeFee")} />
-    </Card>
-  );
-}
-
-function SummaryCard({ value, label, color }) {
-  const colors = {
-    green: "bg-green-50 border-green-200 text-green-700",
-    red: "bg-red-50 border-red-200 text-red-700",
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
-    amber: "bg-amber-50 border-amber-200 text-amber-700",
-  };
-
-  return (
-    <div className={`p-4 rounded-xl border text-center shadow-sm ${colors[color]}`}>
-      <div className="text-2xl font-bold">{Number(value).toLocaleString()}</div>
-      <div className="text-gray-700 mt-1">{label}</div>
-    </div>
-  );
-}
-
-/* ===========================
-   Chart
-=========================== */
-function ChartBlock({ result, t }) {
-  return (
-    <Card className="p-6 bg-white rounded-xl shadow">
-      <h2 className="font-semibold text-gray-700 mb-4">{t("visualComparison")}</h2>
-
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart
-          data={[
-            { name: t("income"), value: result.total_collected },
-            { name: t("expenses"), value: result.total_expenses },
-            { name: t("netProfit"), value: result.net_profit },
-          ]}
-        >
-          <XAxis dataKey="name" />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="value" fill="#f59e0b" />
-        </BarChart>
-      </ResponsiveContainer>
-    </Card>
-  );
-}
-
-/* ===========================
-   Data table
-=========================== */
-function DataBlock({ title, icon, rows }) {
-  return (
-    <Card className="p-6 rounded-xl bg-white shadow">
-      <h2 className="font-semibold text-gray-700 flex items-center gap-2 mb-3">
-        {icon} {title}
-      </h2>
-
-      {rows?.length > 0 ? (
-        <DataTable rows={rows} />
-      ) : (
-        <p className="text-gray-500 text-center py-6">No data</p>
-      )}
-    </Card>
-  );
-}
-
-function DataTable({ rows }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-100 text-gray-600 text-center">
-          <tr>
-            {Object.keys(rows[0] || {}).map((key) => (
-              <th key={key} className="p-2 border capitalize">
-                {key.replace(/_/g, " ")}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="text-center">
-              {Object.values(r).map((v, j) => (
-                <td key={j} className="p-2 border">{String(v)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

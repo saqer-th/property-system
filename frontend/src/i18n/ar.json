@@ -448,8 +448,134 @@
   "overallPortfolio": "المحفظة العامة",
   "totalProperties": "إجمالي العقارات",
   "remainingBalance": "الرصيد المتبقي",
-  "self_office_admin": "إدارة أملاكي"
+  "self_office_admin": "إدارة أملاكي",
+  "brokeragePhoneInvalid": "رقم جوال مكتب العقار غير صحيح",
+  "currentRole": "الدور الحالي",
+  "welcomeBack": "مرحباً بعودتك",
+  "dashboardOverview": "نظرة عامة على نظام إدارة العقارات",
+  "menu_general": "عام",
+  "menu_office": "مكتب العقار",
+  "menu_admin": "الإدارة",
+  "menu_system": "النظام",
+  "manageContractsDesc": "إدارة عقود الإيجار الخاصة بك بكفاءة وسهولة.",
+  "propertiesSubtitle": "تنظيم وإدارة جميع أملاكك العقارية من مكان واحد.",
+  "paymentsDesc": "تتبع المدفوعات والإيرادات الخاصة بك بسلاسة.",
+  "expensesDesc": "راقب مصروفاتك للحفاظ على صحة مالية مثالية.",
+  "receiptsVouchers": "السندات والإيصالات",
+  "receiptsDesc": "إدارة جميع سندات القبض والصرف الخاصة بك بسهولة.",
+  "allContracts": "جميع العقود",
+  "searchPlaceholder": "ابحث عن رقم العقد، اسم المستأجر، اسم العقار...",
+  "paymentStatus": "حالة الدفع",
+  "overview": "نظرة عامة",
+  "financials": "البيانات المالية",
+  "unitsAndProperty": "الوحدة والعقار",
+  "paymentProgress": "تقدم الدفع",
+  "backToContracts": "العودة إلى العقود",
+  "back": "عودة",
+  "location": "الموقع",
+  "totalExpected": "الإجمالي المتوقع",
+  "totalCollected": "الإجمالي المحصل",
+  "pendingAmount": "المبلغ المعلق",
+  "overdueCount": "عدد المتأخرات",
+  "paymentsRequireAction": "الدفعات التي تتطلب إجراء",
+  "progress": "التقدم",
+  "upcoming": "القادمة",
+  "allUpcoming": "جميع القادمة",
+  "days 30": "30 يوم",
+  "days 45": "45 يوم",
+  "days 60": "60 يوم",
+  "filterByDays": "تصفية حسب الأيام",
+  "totalVouchers": "إجمالي السندات",
+  "netCashFlow": "صافي التدفق النقدي",
+  "receipt": "سند قبض",
+  "paymentsOnly": "سندات الصرف",
+  "receiptsOnly": "سندات القبض",
+  "all": "الكل",
+  "parties": "الأطراف",
+  "expensesBreakdown": "تفصيل المصروفات",
+  "noNotes": "لا توجد ملاحظات",
+  "unitExpenses": "مصروفات الوحدة",
+  "Electricity": "كهرباء",
+  "Water": "مياه",
+  "backToProperty": "العودة إلى العقارات",
+  "averageExpense": "متوسط المصروفات",
+  "highestExpense": "أعلى مصروف",
+  "paymentAging": "تأخر الدفعات",
+  "delayedPayments": "الدفعات المتأخرة",
+  "Paid": "مدفوعة",
+  "Pending": "قادمة",
+  "Overdue": "متأخرة",
+  "dominantType": "النوع السائد",
+  "services": "الخدمات",
+  "available": "متاحة",
+  "rentRevenue": "إيرادات الإيجار",
+  "reportsDesc": "إنشاء تقارير مالية وتشغيلية متقدمة لإدارة ممتلكاتك بكفاءة عالية.",
+  "allReports": "جميع التقارير",
+  "propertySummary": "ملخص العقارات",
+  "Comprehensive overview of all properties": "نظرة شاملة على جميع العقارات",
+
+  "unitsByProperty": "الوحدات حسب العقار",
+  "Breakdown of units per property": "تفصيل الوحدات لكل عقار",
+
+  "contractsByProperty": "العقود حسب العقار",
+  "Active contracts linked to properties": "العقود النشطة المرتبطة بالعقار",
 
 
+  "unitSummary": "ملخص الوحدات",
+  "Status summary of all units": "ملخص حالة جميع الوحدات",
 
+  "unitContracts": "عقود الوحدة",
+  "History of contracts per unit": "سجل العقود لكل وحدة",
+
+
+  "contractSummary": "ملخص العقود",
+  "Expiry and renewal status": "حالة انتهاء وتجديد العقود",
+
+  "paymentsReport": "تقرير الدفعات",
+  "Scheduled vs collected payments": "المجدول مقابل الدفعات المحصّلة",
+
+  "expensesReport": "تقرير المصروفات",
+  "Expenses linked to contracts": "المصاريف المرتبطة بالعقود",
+
+
+  "officePayments": "دفعات المكتب",
+  "All incoming payments log": "سجل جميع الدفعات الواردة",
+
+  "officeExpenses": "مصروفات المكتب",
+  "Office-wide expense tracking": "تتبع مصروفات المكتب",
+
+  "officeReceipts": "إيصالات المكتب",
+  "Generated receipts log": "سجل الإيصالات الصادرة",
+
+
+  "occupancySummary": "ملخص الإشغال",
+  "Occupancy rates visualization": "عرض نسب الإشغال",
+
+
+  "profitSummary": "ملخص الأرباح",
+  "Profit/Loss analysis": "تحليل الربح والخسارة",
+
+
+  "portfolioSummary": "ملخص المحفظة",
+  "High-level portfolio health": "الصحة العامة للمحفظة الاستثمارية",
+
+
+  "maintenanceActivities": "أنشطة الصيانة",
+  "Maintenance requests log": "سجل طلبات الصيانة",
+
+
+  "auditLog": "سجل التدقيق",
+  "System activity logs": "سجل نشاط النظام",
+  "searchReports": "ابحث عن تقرير...",
+  "analytics": "التحليلات",
+  "confirmDesc": "يرجى التأكيد للمتابعة.",
+  "addContractDesc": "اختر طريقة إضافة العقد.",
+  "autoModeDesc": "قم برفع ملف PDF وسيتم استخراج بيانات العقد تلقائياً.",
+  "manualModeDesc": "أدخل بيانات العقد يدوياً باستخدام النماذج المتاحة.",
+  "confirmSave": "هل أنت متأكد من حفظ هذا العقد؟",
+  "cancel": "إلغاء",
+  "confirm": "تأكيد",
+  "totalReceiptsExpense": "إجمالي المصروفات",
+  "Unknown": "غير معروف"
+  
 }

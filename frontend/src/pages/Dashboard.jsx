@@ -14,6 +14,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { API_URL, API_KEY } from "@/config";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
+import { FileText, CheckCircle, AlertCircle, Clock, TrendingUp, ArrowUpRight, Calendar } from "lucide-react";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -26,10 +27,7 @@ export default function Dashboard() {
   // 🔹 Fetch contracts & payments
   // ===============================
   useEffect(() => {
-    if (!user?.token) {
-      console.log("⏳ Waiting for user...");
-      return;
-    }
+    if (!user?.token) return;
 
     async function fetchData() {
       try {
@@ -42,7 +40,6 @@ export default function Dashboard() {
           "x-active-role": user.activeRole,
         };
 
-        // ✅ التصحيح هنا — نمرر الكائن مباشرة بدون {} داخل {}
         const [contractsRes, paymentsRes] = await Promise.all([
           fetch(`${API_URL}/contracts/my`, { headers, credentials: "include" }),
           fetch(`${API_URL}/payments/my`, { headers, credentials: "include" }),
@@ -51,13 +48,8 @@ export default function Dashboard() {
         const contractsJson = await contractsRes.json();
         const paymentsJson = await paymentsRes.json();
 
-        console.log("📄 Contracts:", contractsJson);
-        console.log("💰 Payments:", paymentsJson);
-
-        if (!contractsJson.success)
-          throw new Error(contractsJson.message || "فشل تحميل العقود");
-        if (!paymentsJson.success)
-          throw new Error(paymentsJson.message || "فشل تحميل الدفعات");
+        if (!contractsJson.success) throw new Error(contractsJson.message || "فشل تحميل العقود");
+        if (!paymentsJson.success) throw new Error(paymentsJson.message || "فشل تحميل الدفعات");
 
         setContracts(contractsJson.data || []);
         setPayments(paymentsJson.data || []);
@@ -73,7 +65,7 @@ export default function Dashboard() {
   }, [user]);
 
   // ===============================
-  // 🧮 Summary
+  // 🧮 Summary Calculations
   // ===============================
   const totalContracts = contracts.length;
   const activeContracts = contracts.filter(
@@ -89,9 +81,7 @@ export default function Dashboard() {
     return diff > 0 && diff <= 30;
   }).length;
 
-  // ===============================
-  // 📈 Monthly payments chart
-  // ===============================
+  // Monthly payments chart data
   const monthly = {};
   payments.forEach((p) => {
     const date = new Date(p.payment_date || p.due_date || p.created_at);
@@ -104,9 +94,7 @@ export default function Dashboard() {
     .slice(-6)
     .map(([m, val]) => ({ month: m, payments: val }));
 
-  // ===============================
-  // ⏰ Contracts ending soon
-  // ===============================
+  // Contracts ending soon
   const soonToExpire = contracts.filter((c) => {
     const end = new Date(c.tenancy_end || c.end_date);
     if (isNaN(end)) return false;
@@ -115,99 +103,181 @@ export default function Dashboard() {
   });
 
   // ===============================
-  // 🧩 UI Rendering
+  // 🧩 Components
   // ===============================
+  const StatsCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 group">
+      <div className="flex items-start justify-between mb-4">
+        <div className={`p-3 rounded-xl ${bgClass} ${colorClass} group-hover:scale-110 transition-transform duration-300`}>
+          <Icon size={24} />
+        </div>
+        {/* <span className="flex items-center text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
+          +2.5% <ArrowUpRight size={12} className="ml-1" />
+        </span> */}
+      </div>
+      <div>
+        <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
+        <h3 className="text-3xl font-bold text-gray-900">{value}</h3>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <DashboardLayout>
-        <p className="text-center text-gray-500 mt-10">{t("loadingData")}</p>
+        <div className="flex h-[80vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            <p className="text-gray-400 animate-pulse">{t("loadingData")}</p>
+          </div>
+        </div>
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        {/* 📊 Summary Cards */}
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
-          {[
-            { title: t("totalContracts"), value: totalContracts },
-            { title: t("activeContracts"), value: activeContracts },
-            { title: t("expiredContracts"), value: expiredContracts },
-            { title: t("renewableContracts"), value: renewableContracts },
-          ].map((s, idx) => (
-            <Card
-              key={idx}
-              className="shadow-sm rounded-2xl border border-border bg-white hover:shadow-md transition"
-            >
-              <CardHeader>
-                <CardTitle className="text-gray-500 text-sm">{s.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-emerald-600">{s.value}</p>
-              </CardContent>
-            </Card>
-          ))}
+      <div className="space-y-8 max-w-7xl mx-auto">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {t("welcomeBack")}, <span className="text-primary">{user?.name}</span> 👋
+            </h1>
+            <p className="text-gray-500 mt-1">{t("dashboardOverview") || "Here's what's happening with your properties today."}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm flex items-center gap-2">
+              <Calendar size={16} />
+              {new Date().toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </span>
+          </div>
         </div>
 
-        {/* 💰 Monthly Payments Chart */}
-        <Card className="shadow-sm rounded-2xl border border-border bg-white">
-          <CardHeader>
-            <CardTitle>{t("monthlyPayments")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {chartData.length === 0 ? (
-              <p className="text-gray-500 text-sm">لا توجد بيانات مدفوعات</p>
-            ) : (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="payments" fill="#10B981" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* 📊 Stats Grid */}
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <StatsCard
+            title={t("totalContracts")}
+            value={totalContracts}
+            icon={FileText}
+            colorClass="text-blue-600"
+            bgClass="bg-blue-50"
+          />
+          <StatsCard
+            title={t("activeContracts")}
+            value={activeContracts}
+            icon={CheckCircle}
+            colorClass="text-emerald-600"
+            bgClass="bg-emerald-50"
+          />
+          <StatsCard
+            title={t("expiredContracts")}
+            value={expiredContracts}
+            icon={AlertCircle}
+            colorClass="text-rose-600"
+            bgClass="bg-rose-50"
+          />
+          <StatsCard
+            title={t("renewableContracts")}
+            value={renewableContracts}
+            icon={Clock}
+            colorClass="text-amber-600"
+            bgClass="bg-amber-50"
+          />
+        </div>
 
-        {/* 📅 Contracts Ending Soon */}
-        <Card className="shadow-sm rounded-2xl border border-border bg-white">
-          <CardHeader>
-            <CardTitle>{t("contractsEndingSoon")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {soonToExpire.length === 0 ? (
-              <p className="text-gray-500 text-sm">{t("noExpiringContracts")}</p>
-            ) : (
-              <table className="w-full text-sm text-gray-700">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="p-2 text-start">{t("tenantName")}</th>
-                    <th className="p-2 text-start">{t("propertyName")}</th>
-                    <th className="p-2 text-start">{t("endDate")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {soonToExpire.map((c, idx) => (
-                    <tr key={idx} className="border-b hover:bg-gray-50 transition">
-                      <td className="p-2">{c.tenant_name || "—"}</td>
-                      <td className="p-2">
-                        {c.property_name || c.property_type || "—"}
-                      </td>
-                      <td className="p-2">
-                        {(c.tenancy_end || c.end_date || "").split("T")[0]}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* 💰 Monthly Payments Chart */}
+          <div className="lg:col-span-2">
+            <Card className="h-full shadow-[0_2px_10px_rgba(0,0,0,0.03)] border-gray-100 rounded-2xl overflow-hidden">
+              <CardHeader className="border-b border-gray-50 bg-white/50 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp size={20} className="text-primary" />
+                    {t("monthlyPayments")}
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {chartData.length === 0 ? (
+                  <div className="h-80 flex flex-col items-center justify-center text-gray-400">
+                    <TrendingUp size={48} className="mb-4 opacity-20" />
+                    <p>{t("noPaymentData") || "No payment data available"}</p>
+                  </div>
+                ) : (
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis
+                          dataKey="month"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#9ca3af', fontSize: 12 }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#9ca3af', fontSize: 12 }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: '#f9fafb' }}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                        />
+                        <Bar
+                          dataKey="payments"
+                          fill="var(--color-primary)"
+                          radius={[6, 6, 0, 0]}
+                          barSize={40}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 📅 Contracts Ending Soon */}
+          <div className="lg:col-span-1">
+            <Card className="h-full shadow-[0_2px_10px_rgba(0,0,0,0.03)] border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+              <CardHeader className="border-b border-gray-50 bg-white/50 backdrop-blur-sm">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Clock size={20} className="text-amber-500" />
+                  {t("contractsEndingSoon")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 flex-1 overflow-auto custom-scrollbar">
+                {soonToExpire.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-gray-400 p-6">
+                    <CheckCircle size={48} className="mb-4 opacity-20" />
+                    <p className="text-center text-sm">{t("noExpiringContracts")}</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {soonToExpire.map((c, idx) => (
+                      <div key={idx} className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0">
+                          {c.tenant_name?.charAt(0).toUpperCase() || "T"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{c.tenant_name || "—"}</p>
+                          <p className="text-xs text-gray-500 truncate">{c.property_name || c.property_type || "—"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                            {(c.tenancy_end || c.end_date || "").split("T")[0]}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

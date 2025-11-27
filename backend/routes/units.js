@@ -224,7 +224,7 @@ router.get("/:id", verifyToken, async (req, res) => {
         c.contract_no,
         c.tenancy_start,
         c.tenancy_end,
-        c.annual_rent,
+        c.total_contract_value,
         o.name AS office_name,
         CASE 
           WHEN CURRENT_DATE BETWEEN c.tenancy_start AND c.tenancy_end
@@ -556,7 +556,9 @@ router.get("/by-property/:id", verifyToken, async (req, res) => {
       query = `
         SELECT 
           u.id, u.unit_no, u.unit_type, u.property_id, 
-          u.status, c.office_id, o.name AS office_name
+          u.status, 
+          p.office_id,
+          o.name AS office_name
         FROM units u
         LEFT JOIN properties p ON p.id = u.property_id
         LEFT JOIN offices o ON o.id = p.office_id
