@@ -39,7 +39,9 @@ import {
   User,
   ArrowRight,
   Eye,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import AddReceiptDrawer from "@/components/receipts/AddReceiptDrawer";
 import { API_URL, API_KEY } from "@/config";
@@ -123,6 +125,10 @@ export default function ReceiptsList() {
   const [dateTo, setDateTo] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(20); // 🆕 Set to 20 rows per page
+
   const activeRole = user?.activeRole;
   const canAdd = ["admin", "office_admin", "office", "self_office_admin"].includes(activeRole);
 
@@ -156,7 +162,7 @@ export default function ReceiptsList() {
 
   useEffect(() => {
     fetchReceipts();
-  }, []);
+  }, [user]); // Re-fetch when user changes
 
   // 2. Filter Logic
   useEffect(() => {
@@ -179,10 +185,10 @@ export default function ReceiptsList() {
 
     if (linkFilter) {
       results = results.filter((r) => {
-        if (linkFilter === "contract") return r.contract_id;
-        if (linkFilter === "unit") return r.unit_id;
-        if (linkFilter === "property") return r.property_id;
-        if (linkFilter === "general") return !r.contract_id && !r.unit_id && !r.property_id;
+        if (linkFilter === "contract") return r.contract_id || r.contract_no;
+        if (linkFilter === "unit") return r.unit_id || r.unit_no;
+        if (linkFilter === "property") return r.property_id || r.property_name;
+        if (linkFilter === "general") return !r.contract_no && !r.unit_no && !r.property_name;
         return true;
       });
     }
@@ -191,6 +197,7 @@ export default function ReceiptsList() {
     if (dateTo) results = results.filter((r) => new Date(r.date || r.receipt_date) <= new Date(dateTo));
 
     setFiltered(results);
+    setPage(1); // 🆕 Reset to page 1 on filter change
   }, [searchTerm, activeTab, linkFilter, dateFrom, dateTo, receipts]);
 
   // 3. Stats
@@ -203,6 +210,10 @@ export default function ReceiptsList() {
       .reduce((sum, r) => sum + Number(r.amount || 0), 0);
     return { totalCount: filtered.length, totalReceiptsAmount, totalPaymentsAmount, netCashFlow: totalReceiptsAmount - totalPaymentsAmount };
   }, [filtered]);
+
+  // 4. Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginatedReceipts = filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage);
 
   const formatCurrency = (num) => new Intl.NumberFormat("en-US", { style: "currency", currency: "SAR", minimumFractionDigits: 2 }).format(num || 0);
   const formatDate = (d) => d ? new Date(d).toLocaleDateString(isRtl ? "en-CA" : "en-GB") : "—";
@@ -257,7 +268,7 @@ export default function ReceiptsList() {
           <CardHeader className="p-4 border-b border-gray-100">
              
              <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-                <div className="flex p-1 bg-gray-100 rounded-lg w-fit">
+                <div className="flex p-1 bg-gray-100 rounded-lg w-fit overflow-x-auto">
                    {[
                       {id: "all", label: t("all")},
                       {id: "receipt", label: t("receiptsOnly") || "قبض"}, 
@@ -266,24 +277,24 @@ export default function ReceiptsList() {
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                            activeTab === tab.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
                         }`}
                       >
-                         {tab.label}
+                          {tab.label}
                       </button>
                    ))}
                 </div>
 
-                <div className="flex gap-2">
-                   <div className="relative">
+                <div className="flex gap-2 flex-1 justify-end">
+                   <div className="relative w-full max-w-xs">
                       <Search className={`absolute top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 ${isRtl ? "right-3" : "left-3"}`} />
                       <input 
                          type="text"
                          placeholder={t("searchReceipt") || "بحث برقم السند، الاسم، السبب..."}
                          value={searchTerm}
                          onChange={(e) => setSearchTerm(e.target.value)}
-                         className={`pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none w-full md:w-64 ${isRtl ? "pr-9 pl-4" : ""}`}
+                         className={`pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none w-full ${isRtl ? "pr-9 pl-4" : ""}`}
                       />
                    </div>
                    <Button variant={isFilterOpen ? "secondary" : "outline"} size="icon" onClick={() => setIsFilterOpen(!isFilterOpen)}>
@@ -331,6 +342,7 @@ export default function ReceiptsList() {
                    <p className="text-gray-500 text-sm mt-1">{t("tryAdjustingFilters")}</p>
                 </div>
              ) : (
+                <>
                 <div className="overflow-x-auto">
                    <table className="w-full text-sm text-left">
                       <thead className="text-xs text-gray-500 uppercase bg-gray-50/80 border-b border-gray-100 font-medium">
@@ -345,7 +357,7 @@ export default function ReceiptsList() {
                          </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                         {filtered.map((r, i) => {
+                         {paginatedReceipts.map((r, i) => {
                             const isReceipt = r.receipt_type === "قبض" || r.receipt_type === "receive";
                             return (
                                <tr key={i} className="hover:bg-gray-50/50 transition-colors group">
@@ -419,6 +431,38 @@ export default function ReceiptsList() {
                       </tbody>
                    </table>
                 </div>
+
+                {/* 🆕 Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-gray-100 bg-gray-50/30">
+                    <div className="text-xs text-gray-500">
+                       {t("showing")} <span className="font-medium text-gray-900">{(page - 1) * perPage + 1}-{Math.min(page * perPage, filtered.length)}</span> {t("of")} <span className="font-medium text-gray-900">{filtered.length}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <Button
+                          variant="outline" size="sm"
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                          className="h-8 w-8 p-0"
+                       >
+                          {isRtl ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                       </Button>
+                       <div className="flex items-center gap-1">
+                          {/* Show simpler pagination for mobile/limited space */}
+                          <span className="text-xs font-medium text-gray-700 bg-white px-3 py-1.5 border rounded-md shadow-sm">
+                            {page} / {totalPages}
+                          </span>
+                       </div>
+                       <Button
+                          variant="outline" size="sm"
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page === totalPages}
+                          className="h-8 w-8 p-0"
+                       >
+                          {isRtl ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                       </Button>
+                    </div>
+                </div>
+                </>
              )}
           </CardContent>
         </Card>
@@ -432,7 +476,7 @@ export default function ReceiptsList() {
           />
         )}
 
-        {/* 👁️ Receipt Details Dialog (نافذة التفاصيل الواضحة) */}
+        {/* 👁️ Receipt Details Dialog */}
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
            <DialogContent className="sm:max-w-md" dir={isRtl ? "rtl" : "ltr"}>
               <DialogHeader>

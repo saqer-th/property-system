@@ -576,6 +576,7 @@
   "cancel": "إلغاء",
   "confirm": "تأكيد",
   "totalReceiptsExpense": "إجمالي المصروفات",
-  "Unknown": "غير معروف"
+  "Unknown": "غير معروف",
+  "newVoucher": "سند جديد"
   
 }

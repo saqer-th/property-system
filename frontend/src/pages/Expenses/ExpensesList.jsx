@@ -18,7 +18,9 @@ import {
   Wallet,
   Briefcase,
   User,
-  FileQuestion
+  FileQuestion,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import {
   PieChart,
@@ -121,6 +123,10 @@ export default function ExpensesList() {
   const [dateTo, setDateTo] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(20); // 🆕 Set to 20 rows per page
+
   const activeRole = user?.activeRole;
   const canAdd = ["admin", "office_admin", "office", "self_office_admin"].includes(activeRole);
 
@@ -189,6 +195,7 @@ export default function ExpensesList() {
     if (dateTo) results = results.filter((e) => new Date(e.date) <= new Date(dateTo));
 
     setFiltered(results);
+    setPage(1); // 🆕 Reset to first page on filter change
   }, [searchTerm, activeTab, typeFilter, dateFrom, dateTo, expenses]);
 
   // 3. Stats
@@ -218,6 +225,10 @@ export default function ExpensesList() {
       .sort((a, b) => b.value - a.value) // Sort descending
       .slice(0, 6); // Top 6 categories
   }, [filtered]);
+
+  // 🆕 Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginatedExpenses = filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage);
 
   const COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"];
   const formatAmount = (num) => new Intl.NumberFormat("en-US", { style: "currency", currency: "SAR", minimumFractionDigits: 2 }).format(num || 0);
@@ -345,6 +356,7 @@ export default function ExpensesList() {
                        <p className="text-gray-500 text-sm mt-1">{t("tryAdjustingFilters")}</p>
                     </div>
                  ) : (
+                    <>
                     <div className="overflow-x-auto">
                        <table className="w-full text-sm text-left">
                           <thead className="text-xs text-gray-500 uppercase bg-gray-50/80 border-b border-gray-100 font-medium">
@@ -358,7 +370,7 @@ export default function ExpensesList() {
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                             {filtered.map((e, i) => (
+                             {paginatedExpenses.map((e, i) => (
                                 <tr key={i} className="hover:bg-gray-50/50 transition-colors">
                                    <td className={`px-6 py-4 ${isRtl ? "text-right" : "text-left"}`}>
                                       <span className="font-medium text-gray-900 block">{e.expense_type || "—"}</span>
@@ -367,7 +379,7 @@ export default function ExpensesList() {
                                       {formatAmount(e.amount)}
                                    </td>
                                    <td className="px-6 py-4 text-center">
-                                      <OnWhomBadge whom={e.on_whom} t={t} /> {/* ✅ استخدام البادج */}
+                                      <OnWhomBadge whom={e.on_whom} t={t} />
                                    </td>
                                    <td className="px-6 py-4">
                                       <LinkBadge e={e} t={t} />
@@ -385,6 +397,38 @@ export default function ExpensesList() {
                           </tbody>
                        </table>
                     </div>
+
+                    {/* 🆕 Pagination Controls */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-gray-100 bg-gray-50/30">
+                        <div className="text-xs text-gray-500">
+                           {t("showing")} <span className="font-medium text-gray-900">{(page - 1) * perPage + 1}-{Math.min(page * perPage, filtered.length)}</span> {t("of")} <span className="font-medium text-gray-900">{filtered.length}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <Button
+                              variant="outline" size="sm"
+                              onClick={() => setPage(p => Math.max(1, p - 1))}
+                              disabled={page === 1}
+                              className="h-8 w-8 p-0"
+                           >
+                              {isRtl ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                           </Button>
+                           <div className="flex items-center gap-1">
+                              {/* Show simpler pagination for mobile/limited space */}
+                              <span className="text-xs font-medium text-gray-700 bg-white px-3 py-1.5 border rounded-md shadow-sm">
+                                {page} / {totalPages}
+                              </span>
+                           </div>
+                           <Button
+                              variant="outline" size="sm"
+                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                              disabled={page === totalPages}
+                              className="h-8 w-8 p-0"
+                           >
+                              {isRtl ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                           </Button>
+                        </div>
+                    </div>
+                    </>
                  )}
               </CardContent>
            </Card>

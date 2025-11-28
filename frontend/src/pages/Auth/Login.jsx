@@ -294,11 +294,7 @@ export default function LoginPhone() {
                 </button>
               </div>
 
-              {otpCode && (
-                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 text-xs rounded-lg text-center border border-yellow-100">
-                  لأغراض التجربة: الكود هو <strong>{otpCode}</strong>
-                </div>
-              )}
+
             </form>
           )}
 

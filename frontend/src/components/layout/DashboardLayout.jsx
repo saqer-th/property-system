@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { useAuth } from "@/context/AuthContext";
-
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,19 +22,18 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Icons
-import { 
-  LogOut, 
-  Menu, 
-  Bell, 
-  Globe, 
-  User, 
+import {
+  LogOut,
+  Menu,
+  Bell,
+  Globe,
   Settings,
   ChevronDown,
   Search,
   Sun,
   Moon,
-  CreditCard,
-  LayoutDashboard
+  PanelLeftClose,
+  PanelLeftOpen
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -45,6 +43,10 @@ export default function DashboardLayout({ children }) {
   const location = useLocation();
   const isRtl = i18n.language === "ar";
   const [isDark, setIsDark] = useState(false);
+
+  // 🆕 STATE: Control Desktop Sidebar Visibility
+  // true = Full Width (288px), false = Collapsed/Hidden (80px)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // 🔍 Generate Page Title from Path
   const getPageTitle = () => {
@@ -74,21 +76,28 @@ export default function DashboardLayout({ children }) {
   };
 
   return (
-    <div className="flex h-screen w-full bg-gray-50/50 text-gray-900" dir={isRtl ? "rtl" : "ltr"}>
-      {/* 🧭 Sidebar (Desktop) */}
-      <aside className="hidden md:flex md:w-72 flex-col fixed inset-y-0 z-50 border-r bg-white h-full shadow-sm transition-all">
-        <Sidebar />
+    // 1. OUTER WRAPPER: Full screen, no body scroll (Critical for iPad)
+    <div className="flex h-screen w-full bg-gray-50/50 text-gray-900 overflow-hidden" dir={isRtl ? "rtl" : "ltr"}>
+
+      {/* 🧭 Sidebar (Desktop) - Now a Flex Item, not Fixed */}
+      {/* This prevents margin calculations and layout shifts */}
+      <aside 
+        className={`hidden md:flex flex-col border-r bg-white h-full shadow-sm transition-all duration-300 ease-in-out z-20 shrink-0 ${isSidebarOpen ? "w-72" : "w-[80px]"}`}
+      >
+        <Sidebar isCollapsed={!isSidebarOpen} />
       </aside>
 
-      {/* 🧱 Main Content Area */}
-      <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${isRtl ? "md:mr-72" : "md:ml-72"}`}>
-        
+      {/* 🧱 Main Content Wrapper */}
+      {/* min-w-0 is CRITICAL: It stops flex children from growing beyond screen width */}
+      <div className="flex-1 flex flex-col min-w-0 h-full bg-gray-50/50">
+
         {/* 🔝 Header */}
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-white/80 px-6 backdrop-blur-md">
-          
+        <header className="flex-shrink-0 flex h-16 items-center justify-between gap-4 border-b bg-white/80 px-6 backdrop-blur-md z-10">
+
           {/* Left: Mobile Trigger & Title/Search */}
           <div className="flex items-center gap-4 flex-1">
-            {/* Mobile Menu */}
+
+            {/* 📱 Mobile Menu Trigger */}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden text-gray-500 hover:bg-gray-100">
@@ -100,6 +109,17 @@ export default function DashboardLayout({ children }) {
               </SheetContent>
             </Sheet>
 
+            {/* 💻 Desktop Sidebar Toggle Button */}
+            <Button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              variant="ghost"
+              size="icon"
+              className="hidden md:flex text-gray-500 hover:text-emerald-600 hover:bg-emerald-50"
+              title={isSidebarOpen ? "تصغير القائمة" : "توسيع القائمة"}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+            </Button>
+
             {/* Page Title (Mobile/Tablet) */}
             <h2 className="text-lg font-semibold text-gray-800 md:hidden">
               {getPageTitle()}
@@ -108,8 +128,8 @@ export default function DashboardLayout({ children }) {
             {/* 🔍 Global Search (Desktop) */}
             <div className="hidden md:flex items-center relative w-full max-w-md group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-emerald-600 transition-colors" />
-              <Input 
-                placeholder={t("searchPlaceholder") || "بحث في العقود، الوحدات، المستأجرين..."} 
+              <Input
+                placeholder={t("searchPlaceholder") || "بحث في العقود، الوحدات، المستأجرين..."}
                 className="pl-10 bg-gray-100/50 border-transparent focus:bg-white focus:border-emerald-200 focus:ring-emerald-200 transition-all h-10 rounded-xl"
               />
             </div>
@@ -117,10 +137,10 @@ export default function DashboardLayout({ children }) {
 
           {/* Right: Actions & Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
-            
+
             {/* Role Switcher (Desktop) */}
             <div className="hidden lg:block">
-               <RoleSwitcher />
+              <RoleSwitcher />
             </div>
 
             {/* Language */}
@@ -129,7 +149,9 @@ export default function DashboardLayout({ children }) {
             </Button>
 
             {/* Theme */}
-
+            <Button onClick={toggleTheme} variant="ghost" size="icon" className="rounded-full text-gray-500 hover:bg-gray-100 hover:text-emerald-600">
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </Button>
 
             {/* 🔔 Notifications Dropdown */}
             <DropdownMenu>
@@ -158,7 +180,7 @@ export default function DashboardLayout({ children }) {
                   ))}
                 </ScrollArea>
                 <div className="p-2 border-t bg-gray-50/50 rounded-b-xl text-center">
-                   <Button variant="link" size="sm" className="text-xs text-emerald-600 h-auto p-0">عرض كل الإشعارات</Button>
+                  <Button variant="link" size="sm" className="text-xs text-emerald-600 h-auto p-0">عرض كل الإشعارات</Button>
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -174,13 +196,13 @@ export default function DashboardLayout({ children }) {
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:flex flex-col items-start text-xs">
-                     <span className="font-bold text-gray-800 max-w-[100px] truncate">{user?.name || "User"}</span>
-                     <span className="text-gray-500 capitalize font-medium">{user?.activeRole || "Guest"}</span>
+                    <span className="font-bold text-gray-800 max-w-[100px] truncate">{user?.name || "User"}</span>
+                    <span className="text-gray-500 capitalize font-medium">{user?.activeRole || "Guest"}</span>
                   </div>
                   <ChevronDown size={14} className="text-gray-400 hidden md:block" />
                 </Button>
               </DropdownMenuTrigger>
-              
+
               <DropdownMenuContent className="w-60" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal p-3">
                   <div className="flex flex-col space-y-1">
@@ -193,20 +215,11 @@ export default function DashboardLayout({ children }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem asChild className="cursor-pointer focus:bg-emerald-50 focus:text-emerald-700">
-                     <Link to="/settings" className="flex items-center w-full">
-                        <Settings className="mr-2 h-4 w-4" /> <span>{t("settings") || "الإعدادات"}</span>
-                     </Link>
+                    <Link to="/settings" className="flex items-center w-full">
+                      <Settings className="mr-2 h-4 w-4" /> <span>{t("settings") || "الإعدادات"}</span>
+                    </Link>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
-                
-                {/* Mobile Role Switcher (Inside Menu) */}
-                <div className="lg:hidden">
-                   <DropdownMenuSeparator />
-                   <div className="p-2">
-                      <RoleSwitcher />
-                   </div>
-                </div>
-
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer font-medium">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -217,10 +230,14 @@ export default function DashboardLayout({ children }) {
           </div>
         </header>
 
-        {/* 🧱 Content Container */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-          <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-             {children}
+        {/* 🧱 Main Content Scroll Area */}
+        {/* flex-1: Fills remaining height */}
+        {/* overflow-y-auto: Enables internal scrolling */}
+        {/* overflow-x-hidden: Prevents body scrolling from wide content */}
+        {/* relative: Helps with positioning */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth relative">
+          <div className="mx-auto max-w-[1920px] animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
+            {children}
           </div>
         </main>
       </div>

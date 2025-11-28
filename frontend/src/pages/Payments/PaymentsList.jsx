@@ -16,7 +16,9 @@ import {
   User,
   CalendarDays,
   Download,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { API_URL, API_KEY } from "@/config";
 import { useAuth } from "@/context/AuthContext";
@@ -114,6 +116,10 @@ export default function PaymentsList() {
   // 🆕 NEW: Range filter for upcoming
   const [upcomingRange, setUpcomingRange] = useState("all"); // 'all', '30', '45', '60'
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(20); // 🆕 Set to 20 rows per page
+
   const activeRole = user?.activeRole;
 
   // 1. Fetch Data
@@ -191,6 +197,7 @@ export default function PaymentsList() {
     });
 
     setFiltered(results);
+    setPage(1); // 🆕 Reset to page 1 on filter change
   }, [searchTerm, activeTab, upcomingRange, propertyFilter, payments]);
 
   // 3. Stats Calculation
@@ -211,7 +218,10 @@ export default function PaymentsList() {
     return { totalAmount, totalCollected, totalPending, overdueCount };
   }, [filtered]);
 
-  // 4. Helpers
+  // 4. Pagination & Helpers
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginatedPayments = filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage);
+
   const formatCurrency = (val) => new Intl.NumberFormat("en-US", { style: "currency", currency: "SAR", minimumFractionDigits: 0 }).format(val || 0);
   const formatDate = (d) => d ? new Date(d).toLocaleDateString(isRtl ? "en-CA" : "en-GB") : "—";
   const properties = [...new Set(payments.map(p => p.property_name).filter(Boolean))];
@@ -281,7 +291,7 @@ export default function PaymentsList() {
              
              {/* Row 1: Main Tabs & Search */}
              <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-                <div className="flex p-1 bg-gray-100 rounded-lg w-fit">
+                <div className="flex p-1 bg-gray-100 rounded-lg w-fit overflow-x-auto">
                    {[
                       {id: "all", label: t("all")},
                       {id: "paid", label: t("paid")},
@@ -291,11 +301,11 @@ export default function PaymentsList() {
                       <button
                         key={tab.id}
                         onClick={() => { setActiveTab(tab.id); setUpcomingRange("all"); }} // Reset range when tab changes
-                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                            activeTab === tab.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
                         }`}
                       >
-                         {tab.label}
+                          {tab.label}
                       </button>
                    ))}
                 </div>
@@ -316,7 +326,7 @@ export default function PaymentsList() {
                    </Button>
                    {(searchTerm || propertyFilter) && (
                       <Button variant="ghost" size="icon" onClick={() => {setSearchTerm(""); setPropertyFilter(""); setActiveTab("all");}} className="text-red-500">
-                         <RefreshCcw size={16} />
+                          <RefreshCcw size={16} />
                       </Button>
                    )}
                 </div>
@@ -343,7 +353,7 @@ export default function PaymentsList() {
                            : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                         }`}
                       >
-                         {range.label}
+                          {range.label}
                       </button>
                    ))}
                 </div>
@@ -374,6 +384,7 @@ export default function PaymentsList() {
                    <p className="text-gray-500 text-sm mt-1">{t("tryAdjustingFilters")}</p>
                 </div>
              ) : (
+                <>
                 <div className="overflow-x-auto">
                    <table className="w-full text-sm text-left">
                       <thead className="text-xs text-gray-500 uppercase bg-gray-50/80 border-b border-gray-100 font-medium">
@@ -388,7 +399,7 @@ export default function PaymentsList() {
                          </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                         {filtered.map((p, i) => {
+                         {paginatedPayments.map((p, i) => {
                             const dueDate = p.due_date ? new Date(p.due_date) : null;
                             if (dueDate) dueDate.setHours(0,0,0,0);
                             
@@ -464,6 +475,37 @@ export default function PaymentsList() {
                       </tbody>
                    </table>
                 </div>
+
+                {/* 🆕 Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-gray-100 bg-gray-50/30">
+                    <div className="text-xs text-gray-500">
+                       {t("showing")} <span className="font-medium text-gray-900">{(page - 1) * perPage + 1}-{Math.min(page * perPage, filtered.length)}</span> {t("of")} <span className="font-medium text-gray-900">{filtered.length}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <Button
+                          variant="outline" size="sm"
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                          className="h-8 w-8 p-0"
+                       >
+                          {isRtl ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                       </Button>
+                       <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium text-gray-700 bg-white px-3 py-1.5 border rounded-md shadow-sm">
+                            {page} / {totalPages}
+                          </span>
+                       </div>
+                       <Button
+                          variant="outline" size="sm"
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page === totalPages}
+                          className="h-8 w-8 p-0"
+                       >
+                          {isRtl ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                       </Button>
+                    </div>
+                </div>
+                </>
              )}
           </CardContent>
         </Card>
