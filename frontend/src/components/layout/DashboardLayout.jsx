@@ -138,8 +138,8 @@ export default function DashboardLayout({ children }) {
           {/* Right: Actions & Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
 
-            {/* Role Switcher (Desktop) */}
-            <div className="hidden lg:block">
+            {/* Role Switcher (Desktop and Tablet and phone) */}
+            <div >
               <RoleSwitcher />
             </div>
 
