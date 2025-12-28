@@ -1,0 +1,14 @@
+{
+  "tenant": "Tenant",
+  "lessor": "Lessor",
+  "office": "Office",
+  "vendor": "Vendor",
+  "receipt": "Receipt",
+  "payment": "Payment",
+  "income": "Income",
+  "expense": "Expense",
+  "Electricity": "Electricity",
+  "Water": "Water",
+  "Maintenance": "Maintenance",
+  "Other": "Other"
+}

@@ -1,0 +1,14 @@
+{
+  "tenant": "مستأجر",
+  "lessor": "مالك",
+  "office": "مكتب",
+  "vendor": "مورد",
+  "receipt": "سند",
+  "payment": "دفعة",
+  "income": "قبض",
+  "expense": "صرف",
+  "Electricity": "كهرباء",
+  "Water": "ماء",
+  "Maintenance": "صيانة",
+  "Other": "أخرى"
+}
