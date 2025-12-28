@@ -20,9 +20,16 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 8085,
+        DISPLAY: ":99",
+
+        // WhatsApp / Puppeteer
+        WHATSAPP_ENABLED: "true",
+
         ...(isWindows
           ? {}
-          : { PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser" }),
+          : {
+              PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser",
+            }),
       },
     },
 
@@ -42,9 +49,16 @@ module.exports = {
       env: {
         NODE_ENV: "staging",
         PORT: 4001,
+        DISPLAY: ":99",
+
+        // ❌ لا نرسل واتساب من Staging
+        WHATSAPP_ENABLED: "false",
+
         ...(isWindows
           ? {}
-          : { PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser" }),
+          : {
+              PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser",
+            }),
       },
     },
   ],
