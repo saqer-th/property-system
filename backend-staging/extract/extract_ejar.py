@@ -459,6 +459,10 @@ def extract_brokerage(block: str) -> Dict[str, Any]:
                 seen.add(key)
                 uniq.append(b)
         out["brokers"] = uniq
+        
+        # إضافة رقم جوال أول وسيط إلى brokerage_entity
+        if uniq and uniq[0].get("phone") and "brokerage_entity" in out:
+            out["brokerage_entity"]["phone"] = uniq[0]["phone"]
 
     return out
 
