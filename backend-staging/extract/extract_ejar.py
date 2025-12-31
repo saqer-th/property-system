@@ -44,19 +44,44 @@ def extract_text(pdf_path: str) -> Tuple[str, List[str]]:
 def _normalize_ar_presentation(s: str) -> str:
     # يحوّل Presentation Forms إلى حروف عربية عادية
     s = unicodedata.normalize("NFKC", s or "")
+    # تصحيح الرموز الخاصة
+    s = s.replace("ﷲ", "الله")
+    s = s.replace("ﷺ", "")
     # شيل فراغات قبل/بعد النقطتين إن وجدت
     s = re.sub(r"\s*[:：]\s*$", "", s)
     return s
 
 def _shape_ar_for_display(s: str) -> str:
-    """ يحاول قلب/تشكيل النص العربي للعرض (اختياري). """
+    """ تشكيل النص العربي للعرض (بدون قلب bidi). """
     try:
         import arabic_reshaper
-        from bidi.algorithm import get_display
         reshaped = arabic_reshaper.reshape(s)
-        return get_display(reshaped)
+        return reshaped
     except Exception:
         return s
+
+def _fix_arabic_text(text: str) -> str:
+    """ إصلاح اتجاه النص العربي - عكس الكلمات والجملة. """
+    if not text or not ARABIC_CHARS.search(text):
+        return text
+    
+    text = _normalize_ar_presentation(text)
+    
+    # إصلاح الكلمات التي تحتوي على "الله" أو "الـ" بدون مسافات
+    text = re.sub(r'(الله)([^\s])', r'\1 \2', text)  # الله + حرف
+    text = re.sub(r'([^\s])(الله)', r'\1 \2', text)  # حرف + الله
+    text = re.sub(r'([^\s])(ال)([^\s])', r'\1 \2\3', text)  # حرف + ال + حرف
+    
+    words = text.split()
+    reversed_words = []
+    for w in words:
+        # لا نعكس "الله" لأنها خاصة
+        if w == 'الله':
+            reversed_words.append('الله')
+        else:
+            reversed_words.append(w[::-1])
+    
+    return " ".join(reversed_words[::-1])
 
 def arabic_for_json(value: Any, shape: bool=True) -> Any:
     if not isinstance(value, str): 
@@ -267,39 +292,7 @@ def parse_person_card(card: str) -> Dict[str, str]:
     # -----------------------------
     for key in ["name", "nationality"]:
         if key in info and ARABIC_CHARS.search(info[key]):
-            try:
-                import arabic_reshaper
-                from bidi.algorithm import get_display
-                reshaped = arabic_reshaper.reshape(info[key])
-                text = get_display(reshaped)
-            except Exception:
-                text = _normalize_ar_presentation(info[key])
-
-            # 1️⃣ تصحيح "لا" → "ال"
-            text = re.sub(r"(?<=\s)(?:ﻻ|لا)(?=\s)|^ﻻ|^لا", "ال", text)
-            text = text.replace("ﻻ", "ال")
-
-            # 2️⃣ تصحيح "نب" إلى "بن"
-            text = re.sub(r"\bنب\b", "بن", text)
-
-            # 3️⃣ إصلاح الكلمات المقلوبة تلقائياً (عام)
-            def maybe_reverse_word(w):
-                if len(w) > 3 and re.fullmatch(r"[\u0600-\u06FF]+", w):
-                    rev = w[::-1]
-                    arabic_ratio = lambda s: len(re.findall(r"[\u0621-\u064A]", s)) / len(s)
-                    if arabic_ratio(rev) >= 0.8 and not w.endswith("ال") and not w.startswith("ال"):
-                        if re.match(r"[اأإآحخعغفقكلمنهوي]$", rev):
-                            return rev
-                return w
-
-            words = text.split()
-            corrected = [maybe_reverse_word(w) for w in words]
-            text = " ".join(corrected)
-
-            # 4️⃣ تنظيف المسافات والرموز
-            text = re.sub(r"\s+", " ", text).strip(" :،.-")
-
-            info[key] = text
+            info[key] = _fix_arabic_text(info[key])
 
     # ✅ تحويل الحروف الشكلية Presentation Forms إلى الحروف العربية الأصلية
     import unicodedata
@@ -336,7 +329,11 @@ def extract_company_header(block: str, role: str) -> Dict[str, Any]:
     if not name:
         name = pick_first(r"(?mi)^Name\s+(.+?)$", block)
     if name:
-        out[f"{role}_name"] = clean_name_line(name)
+        name = clean_name_line(name)
+        # تصحيح النص العربي إذا كان مقلوباً
+        if ARABIC_CHARS.search(name):
+            name = _fix_arabic_text(name)
+        out[f"{role}_name"] = name
 
     uni = pick_first(r"\bUnified\s*(?:No\.?|Number)\s*([0-9]+)\b", bd)
     cr  = pick_first(r"\bCR\s*No\.?\s*([0-9]+)\b", bd)
@@ -373,68 +370,41 @@ def extract_brokerage(block: str) -> Dict[str, Any]:
 
     # ========== Entity Info ==========
     ent: Dict[str, str] = {}
-    ent["name"]     = pick_first(r"Brokerage\s*Entity\s*Name\s*[:：]?\s*(.+)", block, re.IGNORECASE)
-    ent["address"]  = pick_first(r"Brokerage\s*Entity\s*Address\s*[:：]?\s*(.+)", block, re.IGNORECASE)
+    
+    # استخراج الاسم والعنوان
+    name_raw = pick_first(r"Brokerage\s*Entity\s*Name\s*[:：]?\s*(.+)", block, re.IGNORECASE)
+    address_raw = pick_first(r"Brokerage\s*Entity\s*Address\s*[:：]?\s*(.+)", block, re.IGNORECASE)
+    
+    # تنظيف الاسم والعنوان من الـ labels
+    if name_raw:
+        # إزالة الـ labels العربية والإنجليزية من الاسم
+        name_raw = re.sub(
+            r"(?:اسم\s*منش[اأإآ](?:ة|ﺔ)?\s*الوساطة\s*العقارية|ﺔﻳرﺎﻘﻌﻟا\s*ﺔﻃﺎﺳﻮﻟا\s*ةﺄﺸﻨﻣ\s*ﻢﺳا)\s*[:：]?\s*",
+            "",
+            name_raw,
+            flags=re.IGNORECASE
+        )
+        if ARABIC_CHARS.search(name_raw):
+            ent["name"] = _fix_arabic_text(name_raw)
+        else:
+            ent["name"] = norm_space(name_raw)
+    
+    if address_raw:
+        # إزالة الـ labels من العنوان
+        address_raw = re.sub(
+            r"(?:عنوان\s*منش[اأإآ](?:ة|ﺔ)?\s*الوساطة\s*العقارية|ﺔﻳرﺎﻘﻌﻟا\s*ﺔﻃﺎﺳﻮﻟا\s*ةﺄﺸﻨﻣ\s*ناﻮﻨﻋ)\s*[:：]?\s*",
+            "",
+            address_raw,
+            flags=re.IGNORECASE
+        )
+        if ARABIC_CHARS.search(address_raw):
+            ent["address"] = _fix_arabic_text(address_raw)
+        else:
+            ent["address"] = norm_space(address_raw)
+    
     ent["cr_no"]    = pick_first(r"\bCR\s*No\.?\s*([0-9]+)", bd)
     ent["landline"] = pick_first(r"Landline\s*No\.?\s*[:：]?\s*([0-9\-\s]+)", block, re.IGNORECASE)
     ent["fax"]      = pick_first(r"Fax\s*No\.?\s*[:：]?\s*([0-9\-\s]+)", block, re.IGNORECASE)
-
-    # ========== Helper: Arabic text fixer ==========
-    def fix_arabic_text(text: str) -> str:
-        if not text:
-            return text
-
-        # Normalize Unicode
-        text = unicodedata.normalize("NFKC", text)
-        text = re.sub(r"[^\u0600-\u06FF0-9\s,،.:-]", "", text)
-        text = re.sub(r"\s+", " ", text).strip()
-
-        # Remove all label patterns (Arabic & flipped)
-        text = re.sub(
-            r"(?:"
-            r"اسم\s*منش[اأإآ]\s*الوساطة\s*العقارية[:：]?"
-            r"|عنوان\s*منش[اأإآ]\s*الوساطة\s*العقارية[:：]?"
-            r"|اسم\s*المنش[اأإآ]\s*العقارية[:：]?"
-            r"|المنش[اأإآ]\s*العقارية[:：]?"
-            r"|اسم\s*المنش[اأإآ]\s*[:：]?"
-            r"|عنوان\s*المنش[اأإآ]\s*[:：]?"
-            r"|العنوان\s*[:：]?"
-            r"|Brokerage\s*Entity\s*(?:Name|Address)"
-            r"|Entity\s*(?:Name|Address)"
-            r")",
-            "",
-            text,
-            flags=re.IGNORECASE,
-        )
-
-        # Fix "ﻻ" and normalize lam-alef
-        text = text.replace("ﻻ", "ال")
-        text = re.sub(r"\bلا\b", "ال", text)
-
-        # Reverse the full text (as per your setup)
-        text = text[::-1]
-
-        # Strip repeated labels if still present after reversal
-        text = re.sub(
-            r"(?:"
-            r"اسم\s*منش[اأإآ]\s*الوساطة\s*العقارية[:：]?"
-            r"|عنوان\s*منش[اأإآ]\s*الوساطة\s*العقارية[:：]?"
-            r"|اسم\s*المنش[اأإآ]\s*العقارية[:：]?"
-            r"|اسم\s*المنش[اأإآ]\s*[:：]?"
-            r"|العنوان\s*[:：]?"
-            r")",
-            "",
-            text,
-            flags=re.IGNORECASE,
-        )
-
-        text = re.sub(r"\s+", " ", text).strip(" :،.-")
-        return text
-
-    # Apply cleanup & reverse
-    for k in ["name", "address"]:
-        if ent.get(k):
-            ent[k] = fix_arabic_text(ent[k])
 
     ent = {k: v for k, v in ent.items() if v}
     if ent:
@@ -579,7 +549,13 @@ def extract_title_deeds(block: str) -> Dict[str, Any]:
         block, re.IGNORECASE, post=lambda s: norm_space(re.sub(r"\s*[:：]\s*$","",s))
     )
     if issuer:
-        out["title_deed_issuer"] = issuer
+        # إزالة الـ label وتصحيح الاتجاه
+        issuer = re.sub(r"(?:جهة\s*الإصدار|راﺪﺻﻹا\s*ﺔﻬﺟ)\s*[:：]?\s*", "", issuer)
+        issuer = issuer.strip(" :：")
+        if ARABIC_CHARS.search(issuer):
+            out["title_deed_issuer"] = _fix_arabic_text(issuer)
+        elif issuer:
+            out["title_deed_issuer"] = issuer
 
     # مكان الإصدار
     place = pick_first(
@@ -587,7 +563,13 @@ def extract_title_deeds(block: str) -> Dict[str, Any]:
         block, re.IGNORECASE, post=norm_space
     )
     if place:
-        out["title_deed_place"] = place
+        # إزالة الـ label وتصحيح الاتجاه
+        place = re.sub(r"(?:مكان\s*الإصدار|راﺪﺻﻹا\s*نﺎﻜﻣ)\s*[:：]?\s*", "", place)
+        place = place.strip(" :：")
+        if ARABIC_CHARS.search(place):
+            out["title_deed_place"] = _fix_arabic_text(place)
+        elif place:
+            out["title_deed_place"] = place
 
     # تاريخ الإصدار
     issue_date = pick_first(r"(?i)\bIssue\s*Date\s*[:：]?\s*([0-9/\-]+)", bd,
@@ -687,18 +669,10 @@ def extract_units(block: str) -> List[Dict[str, str]]:
             seen.add(key)
             uniq.append(u)
 
-    # 🔹 تصحيح الحروف (presentation forms → حروف عربية طبيعية)
-    def normalize_arabic_presentation(text: str) -> str:
-        if not text or not re.search(r"[\u0600-\u06FF]", text):
-            return text
-        text = unicodedata.normalize("NFKC", text)  # يحول ﻢ → م ، ﻋ → ع
-        text = re.sub(r"\s+", " ", text).strip(" :،.-")
-        return text
-
+    # 🔹 تصحيح النصوص العربية في unit_type
     for u in uniq:
-        for k in ["unit_type"]:
-            if k in u:
-                u[k] = normalize_arabic_presentation(u[k])[::-1]  # نقلب النص العربي
+        if "unit_type" in u and ARABIC_CHARS.search(u["unit_type"]):
+            u["unit_type"] = _fix_arabic_text(u["unit_type"])
 
     return uniq
 
@@ -791,6 +765,17 @@ def extract_all(pdf_path: str, debug: bool=False) -> Dict[str, Any]:
 
     tenant_company = extract_company_header(tenant_block, "tenant")
     data.update(tenant_company)
+    
+    # استخراج الاسم من tenant_block مباشرة (بدل الاعتماد على company header)
+    tenant_people = extract_party_people(tenant_block)
+    if tenant_people and tenant_people[0].get("name"):
+        data["tenant_name"] = tenant_people[0]["name"]
+        if not data.get("tenant_id") and tenant_people[0].get("id"):
+            data["tenant_id"] = tenant_people[0]["id"]
+        if not data.get("tenant_phone") and tenant_people[0].get("phone"):
+            data["tenant_phone"] = tenant_people[0]["phone"]
+        if data.get("tenant") and "name" in data["tenant"]:
+            data["tenant"]["name"] = tenant_people[0]["name"]
 
     tenant_reps = extract_party_people(tenant_rep_blk)
     if tenant_reps:
@@ -868,18 +853,15 @@ def main():
 
     data, full_text = extract_all(pdf_path, debug=args.debug)
 
-    # ✅ إصلاح العربية في القيم قبل الحفظ
-    shaped = walk_and_fix_arabic(data, shape=False)
-
     with open(out_json, "w", encoding="utf-8") as f:
-        json.dump(shaped, f, ensure_ascii=False, indent=2)
-    print(f"[OK] JSON saved -> {out_json}")
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"[OK] JSON saved -> {out_json}", flush=True)
 
     if args.debug:
         out_txt = os.path.join(out_dir, f"{base}_raw_text.txt")
         with open(out_txt, "w", encoding="utf-8") as f:
             f.write(full_text)
-        print(f"[DEBUG] raw text -> {out_txt}")
+        print(f"[DEBUG] raw text -> {out_txt}", flush=True)
 
 if __name__ == "__main__":
     main()
