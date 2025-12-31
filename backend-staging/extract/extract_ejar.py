@@ -770,12 +770,17 @@ def extract_all(pdf_path: str, debug: bool=False) -> Dict[str, Any]:
     tenant_people = extract_party_people(tenant_block)
     if tenant_people and tenant_people[0].get("name"):
         data["tenant_name"] = tenant_people[0]["name"]
-        if not data.get("tenant_id") and tenant_people[0].get("id"):
+        if tenant_people[0].get("id"):
             data["tenant_id"] = tenant_people[0]["id"]
-        if not data.get("tenant_phone") and tenant_people[0].get("phone"):
+        if tenant_people[0].get("phone"):
             data["tenant_phone"] = tenant_people[0]["phone"]
-        if data.get("tenant") and "name" in data["tenant"]:
+        # تحديث tenant object
+        if data.get("tenant"):
             data["tenant"]["name"] = tenant_people[0]["name"]
+            if tenant_people[0].get("id"):
+                data["tenant"]["id"] = tenant_people[0]["id"]
+            if tenant_people[0].get("phone"):
+                data["tenant"]["phone"] = tenant_people[0]["phone"]
 
     tenant_reps = extract_party_people(tenant_rep_blk)
     if tenant_reps:
