@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db/pool.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { logEvent } from "../utils/eventLogger.js";
 
 const router = express.Router();
 
@@ -218,6 +219,12 @@ LEFT JOIN units u ON u.id = cu.unit_id
        ✅ تنفيذ الاستعلام
     ========================================================= */
     const result = await client.query(query, params);
+
+    await logEvent({
+      req,
+      event_type: "payments_page_view",
+      entity_type: "payment",
+    });
 
     res.json({
       success: true,

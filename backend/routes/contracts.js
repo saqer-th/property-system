@@ -3,6 +3,7 @@ import pool from "../db/pool.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { checkPermission } from "../helpers/permissions.js";
 import { logAudit } from "../middleware/audit.js";
+import { logEvent } from "../utils/eventLogger.js";
 const router = express.Router();
 
 
@@ -191,6 +192,12 @@ router.get("/my", verifyToken, async (req, res) => {
         days_to_end = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
       }
       return { ...c, days_to_end };
+    });
+
+    await logEvent({
+      req,
+      event_type: "contracts_list_view",
+      entity_type: "contract",
     });
 
     res.json({
@@ -648,6 +655,17 @@ router.post("/full", verifyToken, async (req, res) => {
 
     await client.query("COMMIT");
 
+    await logEvent({
+      req,
+      event_type: "contract_create",
+      entity_type: "contract",
+      entity_id: contractId,
+      metadata: {
+        office_id: officeId,
+        property_id: propertyId,
+      },
+    });
+
     res.json({
       success: true,
       message: "✅ تم إنشاء العقد وربط الوحدات بنجاح",
@@ -813,6 +831,13 @@ router.put("/:id", verifyToken, async (req, res) => {
        6️⃣ COMMIT & RETURN
     ========================================================= */
     await client.query("COMMIT");
+
+    await logEvent({
+      req,
+      event_type: "contract_update",
+      entity_type: "contract",
+      entity_id: newContract?.id || Number(id),
+    });
 
     res.json({
       success: true,
@@ -1784,6 +1809,13 @@ router.get("/:id", verifyToken, async (req, res) => {
       record_id: contract.id,
       description: `عرض تفاصيل عقد (${contract.contract_no})`,
       endpoint: `/contracts/${id}`,
+    });
+
+    await logEvent({
+      req,
+      event_type: "contract_open",
+      entity_type: "contract",
+      entity_id: contract.id,
     });
 
     return res.json({

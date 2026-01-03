@@ -18,6 +18,7 @@ import pool from "../db/pool.js";
 
 import { generatePDF } from "../utils/pdf.js";
 import { systemLogo } from "../utils/systemLogo.js";
+import { logEvent } from "../utils/eventLogger.js";
 
 const router = express.Router();
 /* =========================================================
@@ -109,6 +110,14 @@ router.get(
          📄 Generate PDF
       ========================================================== */
       const pdfBuffer = await generatePDF(templateData);
+
+      await logEvent({
+        req,
+        event_type: "report_pdf_download",
+        entity_type: "report",
+        entity_id: id || null,
+        metadata: { type, lang },
+      });
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(

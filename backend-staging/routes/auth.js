@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { sendWhatsAppMessage } from "../utils/whatsappClient.js";
+import { logEvent } from "../utils/eventLogger.js";
 
 const router = express.Router();
 
@@ -139,6 +140,7 @@ router.post("/login-phone", async (req, res) => {
 router.post("/verify-otp", async (req, res) => {
   const pool = req.pool;
   let { phone, otp_code } = req.body;
+  let officeId = null;
 
   if (!phone || !otp_code)
     return res.status(400).json({ success: false, message: "رقم الجوال والكود مطلوبان" });
@@ -211,6 +213,7 @@ router.post("/verify-otp", async (req, res) => {
 
       if (officeRes.rows.length) {
         const office = officeRes.rows[0];
+        officeId = office.office_id;
 
         // 🔸 تحقق من حالة المكتب
         if (office.office_status === "suspended" || office.office_status === "موقوف") {
@@ -259,6 +262,18 @@ router.post("/verify-otp", async (req, res) => {
       sameSite: "None",
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    req.user = {
+      id: user.id,
+      activeRole,
+      office_id: officeId,
+    };
+    await logEvent({
+      req,
+      event_type: "login",
+      entity_type: "user",
+      entity_id: user.id,
     });
 
     res.json({

@@ -36,7 +36,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "https://property-system-pi.vercel.app",
-  "https://app.f4lcon.tech"
+  "https://staging.f4lcon.tech"
 ];
 
 // ✅ تفعيل CORS بطريقة ديناميكية + دعم preflight
@@ -93,6 +93,7 @@ import userPermissionsRoutes from "./routes/permissions.js";
 import remindersRouter from "./routes/reminders.js";
 import Users from "./routes/users.js";
 import reports from "./routes/reports.js";
+import adminAnalyticsRoutes from "./routes/admin-analytics.js";
 
 // =======================================
 // 🔗 ربط المسارات
@@ -112,6 +113,7 @@ app.use("/admin", userPermissionsRoutes);
 app.use("/reminders", remindersRouter);
 app.use("/users", Users);
 app.use("/reports", reports);
+app.use("/admin/analytics", adminAnalyticsRoutes);
 // =======================================
 // ✅ فallback headers لـ CORS (احتياطي)
 app.use((req, res, next) => {

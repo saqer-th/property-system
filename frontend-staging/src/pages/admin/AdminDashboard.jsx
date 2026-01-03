@@ -8,7 +8,8 @@ import {
   FileText, 
   CreditCard, 
   LayoutDashboard,
-  Activity
+  Activity,
+  TrendingUp
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
@@ -19,6 +20,7 @@ import RolesTab from "./tabs/RolesTab";
 import ReportsTab from "./tabs/ReportsTab";
 import AuditTab from "./tabs/AuditTab";
 import SubscriptionsTab from "./tabs/SubscriptionsTab";
+import AnalyticsTab from "./tabs/AnalyticsTab";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("offices");
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
     { id: "users", label: "المستخدمين", icon: Users, component: <UsersTab /> },
     { id: "roles", label: "الصلاحيات والأدوار", icon: Shield, component: <RolesTab /> },
     { id: "reports", label: "التقارير والإحصائيات", icon: BarChart3, component: <ReportsTab /> },
+    { id: "analytics", label: "تحليلات الإدارة", icon: TrendingUp, component: <AnalyticsTab /> },
     { id: "audit", label: "سجل العمليات (Audit)", icon: Activity, component: <AuditTab /> },
   ];
 
@@ -74,7 +77,7 @@ export default function AdminDashboard() {
               <TabsContent 
                 key={tab.id} 
                 value={tab.id} 
-                className="focus-visible:outline-none animate-in fade-in slide-in-from-bottom-2 duration-300"
+                className="focus-visible:outline-none"
               >
                 {tab.component}
               </TabsContent>
