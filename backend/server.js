@@ -36,7 +36,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "https://property-system-pi.vercel.app",
-  "https://staging.f4lcon.tech"
+  "https://staging.f4lcon.tech",
+  "https://app.f4lcon.tech"
 ];
 
 // ✅ تفعيل CORS بطريقة ديناميكية + دعم preflight
