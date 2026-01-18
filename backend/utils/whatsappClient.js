@@ -118,7 +118,7 @@ export async function sendWhatsAppMessage(phone, message) {
 
     const target = formatPhone(phone);
 
-    await client.sendMessage(target, message);
+    await client.sendMessage(target, message, { sendSeen: false });
     console.log(`📩 Message sent to: ${target}`);
 
     return { success: true };
